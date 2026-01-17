@@ -12,7 +12,17 @@ import { fileURLToPath } from "node:url";
 
 const app = express();
 const port = Number.parseInt(process.env.PORT ?? "3001", 10);
-const elevenlabs = new ElevenLabsClient();
+
+// Check for ElevenLabs API key
+if (!process.env.ELEVENLABS_API_KEY) {
+  console.warn(
+    "Warning: ELEVENLABS_API_KEY not set. Voice cloning and TTS will fail.",
+  );
+}
+
+const elevenlabs = new ElevenLabsClient({
+  apiKey: process.env.ELEVENLABS_API_KEY,
+});
 const upload = multer({ storage: multer.memoryStorage() });
 
 const allowedOrigins = (process.env.CORS_ORIGIN ?? "http://localhost:5173")
@@ -33,10 +43,27 @@ app.use(
 );
 app.use(express.json({ limit: "2mb" }));
 
+// Health check endpoint
+app.get("/api/health", (req, res) => {
+  res.json({
+    status: "ok",
+    timestamp: new Date().toISOString(),
+    elevenlabsConfigured: !!process.env.ELEVENLABS_API_KEY,
+  });
+});
+
 app.post("/api/clone", upload.array("files"), async (req, res) => {
   const files = req.files ?? [];
   if (!Array.isArray(files) || files.length === 0) {
     res.status(400).json({ error: "No audio files uploaded." });
+    return;
+  }
+
+  if (!process.env.ELEVENLABS_API_KEY) {
+    res.status(500).json({
+      error:
+        "ELEVENLABS_API_KEY not configured. Please set it in your environment variables.",
+    });
     return;
   }
 
@@ -67,8 +94,11 @@ app.post("/api/clone", upload.array("files"), async (req, res) => {
 
     res.json({ voiceId: voice.voiceId });
   } catch (error) {
+    console.error("Clone error:", error);
+    const errorMessage =
+      error instanceof Error ? error.message : "Clone failed.";
     res.status(500).json({
-      error: error instanceof Error ? error.message : "Clone failed.",
+      error: errorMessage,
     });
   } finally {
     await Promise.all(
@@ -450,4 +480,12 @@ app.post("/api/generate", upload.single("audio"), async (req, res) => {
 
 app.listen(port, () => {
   console.log(`API listening on http://localhost:${port}`);
+  console.log(`CORS allowed origins: ${allowedOrigins.join(", ")}`);
+  if (!process.env.ELEVENLABS_API_KEY) {
+    console.warn(
+      "⚠️  ELEVENLABS_API_KEY not set. Voice cloning and TTS endpoints will fail.",
+    );
+  } else {
+    console.log("✓ ElevenLabs API key configured");
+  }
 });
