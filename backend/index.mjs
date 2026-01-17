@@ -228,27 +228,32 @@ app.post(
       });
 
       let filter;
-      // CRITICAL FIX: Use the input stream twice with separate trim operations
-      // This ensures the right segment is properly trimmed from insertAt to end
-      // Instead of using asplit (which might cause issues), we reference [0:a] twice
+      // CRITICAL FIX: Use separate input streams for left and right segments
+      // Input 0: main audio (for left segment 0 to insertAt)
+      // Input 2: main audio seeked to insertAt (for right segment insertAt to end)
+      // This ensures the right segment truly starts from insertAt, not from 0
       
-      // Left segment: from 0 to insertAt
+      // Left segment: from input 0, trim from 0 to insertAt
       const baseHead =
         `[0:a]aresample=44100,aformat=channel_layouts=mono,` +
         `atrim=start=0:end=${clampedInsertAt},` +
         `loudnorm=I=-16:TP=-1.5:LRA=11,` +
         `asetpts=PTS-STARTPTS[a0]`;
       
-      // Right segment: from insertAt to end
-      // CRITICAL: Always use explicit end value to ensure proper trimming
+      // Right segment: from input 2 (already seeked to insertAt), trim to end
+      // Since input 2 is seeked with -ss, it already starts at insertAt
+      // We just need to trim to the end if we know the duration
       const rightEnd = mainDuration !== null 
-        ? mainDuration 
-        : (clampedInsertAt + 3600); // Fallback to 1 hour if duration unknown
-      const baseTail =
-        `[0:a]aresample=44100,aformat=channel_layouts=mono,` +
-        `atrim=start=${clampedInsertAt}:end=${rightEnd},` +
-        `loudnorm=I=-16:TP=-1.5:LRA=11,` +
-        `asetpts=PTS-STARTPTS[a1]`;
+        ? (mainDuration - clampedInsertAt)  // Duration from insertAt to end
+        : null;
+      const baseTail = rightEnd !== null
+        ? `[2:a]aresample=44100,aformat=channel_layouts=mono,` +
+          `atrim=start=0:end=${rightEnd},` +
+          `loudnorm=I=-16:TP=-1.5:LRA=11,` +
+          `asetpts=PTS-STARTPTS[a1]`
+        : `[2:a]aresample=44100,aformat=channel_layouts=mono,` +
+          `loudnorm=I=-16:TP=-1.5:LRA=11,` +
+          `asetpts=PTS-STARTPTS[a1]`;
       
       // Insert audio processing
       const insert =
@@ -280,12 +285,16 @@ app.post(
         ].join(";");
       }
 
+      // Use separate input streams with seek for more reliable trimming
+      // Input 0: main audio (used for left segment)
+      // Input 1: insert audio
+      // Input 2: main audio again (used for right segment, seeked to insertAt)
       const args = [
         "-y",
-        "-i",
-        basePath,
-        "-i",
-        insertPath,
+        "-i", basePath,                    // [0:a] - main audio for left segment
+        "-i", insertPath,                  // [1:a] - insert audio
+        "-ss", clampedInsertAt.toString(),  // Seek to insertAt
+        "-i", basePath,                    // [2:a] - main audio for right segment (seeked)
         "-filter_complex",
         filter,
         "-map",
