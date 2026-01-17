@@ -4,7 +4,7 @@ const LandingHero = () => {
   const bars = Array.from({ length: 18 }, (_, index) => index);
 
   return (
-    <section className="hero-section">
+    <div className="hero-inner">
       <div className="hero-content">
         <div className="hero-copy reveal delay-1">
           <span className="pill">AI-Powered Audio Insertion</span>
@@ -39,7 +39,7 @@ const LandingHero = () => {
           </div>
         </div>
       </div>
-    </section>
+    </div>
   );
 };
 
