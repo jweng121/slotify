@@ -7,7 +7,7 @@ from typing import Dict, List, Optional
 
 from pydub import AudioSegment
 
-from ad_inserter import analysis, llm, mix
+from ad_inserter import analysis, llm, mix, tts
 
 
 def _default_model(provider: str) -> str:
@@ -31,7 +31,9 @@ def _ensure_debug_dir(path: Path) -> None:
 def run() -> None:
     parser = argparse.ArgumentParser(description="Insert a promo into audio.")
     parser.add_argument("--main", required=True, type=Path)
-    parser.add_argument("--promo-audio", required=True, type=Path)
+    promo_group = parser.add_mutually_exclusive_group(required=True)
+    promo_group.add_argument("--promo-audio", type=Path)
+    promo_group.add_argument("--voice-id")
     parser.add_argument("--product-name", required=True)
     parser.add_argument("--product-desc", required=True)
     parser.add_argument("--product-url", default=None)
@@ -41,6 +43,9 @@ def run() -> None:
     parser.add_argument("--debug-dir", type=Path)
     parser.add_argument("--llm-provider", choices=["openai"], default="openai")
     parser.add_argument("--llm-model", default=None)
+    parser.add_argument("--tts-url", default="http://localhost:3001/api/tts")
+    parser.add_argument("--tts-model-id", default=None)
+    parser.add_argument("--tts-output-format", default=None)
     parser.add_argument("--duck-db", type=float, default=0.0)
 
     args = parser.parse_args()
@@ -48,10 +53,6 @@ def run() -> None:
     analysis.check_ffmpeg()
 
     main_audio = analysis.standardize_audio(analysis.load_audio(args.main))
-    promo_audio = analysis.standardize_audio(analysis.load_audio(args.promo_audio))
-
-    if len(promo_audio) > 20000:
-        raise RuntimeError("Promo audio is longer than 20 seconds; please shorten it.")
 
     candidates: List[int] = []
     tempo: Optional[float] = None
@@ -80,6 +81,24 @@ def run() -> None:
         mode=args.mode,
         candidates=analysis.build_candidate_payload(candidates, snippets),
     )
+
+    if args.promo_audio:
+        promo_audio = analysis.standardize_audio(analysis.load_audio(args.promo_audio))
+    else:
+        promo_audio = analysis.standardize_audio(
+            tts.synthesize_audio(
+                tts.TTSRequest(
+                    voice_id=args.voice_id,
+                    text=llm_result.promo_text,
+                    url=args.tts_url,
+                    model_id=args.tts_model_id,
+                    output_format=args.tts_output_format,
+                )
+            )
+        )
+
+    if len(promo_audio) > 20000:
+        raise RuntimeError("Promo audio is longer than 20 seconds; please shorten it.")
 
     if args.mode == "podcast" and llm_result.chosen_index is not None:
         if 0 <= llm_result.chosen_index < len(candidates):
