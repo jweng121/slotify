@@ -18,14 +18,12 @@ def _default_model(provider: str) -> str:
     return "gpt-4o-mini"
 
 
-def _build_snippets(
+def _build_transcripts(
     audio: AudioSegment, candidates: List[int], max_snippets: int = 5
-) -> Dict[int, str]:
-    snippets: Dict[int, str] = {}
-    for cand in candidates[:max_snippets]:
-        snippet = analysis.transcribe_snippet(audio, cand - 15000, cand)
-        snippets[cand] = snippet
-    return snippets
+) -> Dict[int, Dict[str, str]]:
+    return analysis.build_transcript_snippets(
+        audio, candidates, max_candidates=max_snippets
+    )
 
 
 def _filter_candidates(
@@ -170,10 +168,12 @@ def run() -> None:
     candidates_for_prompt: List[int] = []
     tempo: Optional[float] = None
     beat_times_ms: List[int] = []
-    snippets: Dict[int, str] = {}
+    silence_ranges: Optional[List[tuple[int, int]]] = None
+    transcripts: Dict[int, Dict[str, str]] = {}
 
     if args.mode == "podcast":
-        candidates = analysis.detect_podcast_candidates(main_audio)
+        silence_ranges = analysis.detect_silence_ranges(main_audio)
+        candidates = analysis.candidates_from_silence_ranges(silence_ranges)
     else:
         song = analysis.analyze_song(args.main)
         candidates = song.candidates_ms
@@ -190,31 +190,48 @@ def run() -> None:
     )
     if not candidates_for_prompt:
         candidates_for_prompt = candidates
+    if not candidates_for_prompt:
+        candidates_for_prompt = [
+            analysis.choose_default_insertion(candidates, min_offset_ms=min_insert_ms)
+        ]
 
     if args.mode == "podcast":
         if analysis.whisper_available() and candidates_for_prompt:
-            snippets = _build_snippets(main_audio, candidates_for_prompt)
+            transcripts = _build_transcripts(main_audio, candidates_for_prompt)
 
     chosen_ms = analysis.choose_default_insertion(
         candidates_for_prompt, min_offset_ms=min_insert_ms
     )
     if len(main_audio) > 0:
         chosen_ms = min(chosen_ms, len(main_audio) - 1)
-    llm_result = llm.generate_promo_and_choice(
+
+    sponsor_text = args.product_desc.strip()
+    if not sponsor_text:
+        sponsor_text = args.product_name.strip()
+
+    candidate_payload = analysis.build_candidate_payload(
+        audio=main_audio,
+        candidates=candidates_for_prompt,
+        mode=args.mode,
+        beat_times_ms=beat_times_ms,
+        silence_ranges=silence_ranges,
+        transcripts=transcripts,
+    )
+
+    llm_result = llm.select_best_insertion(
         provider=args.llm_provider,
         model=args.llm_model or _default_model(args.llm_provider),
-        product_name=args.product_name,
-        product_desc=args.product_desc,
-        product_url=args.product_url,
+        sponsor_text=sponsor_text,
         mode=args.mode,
-        candidates=analysis.build_candidate_payload(candidates_for_prompt, snippets),
+        main_audio_duration_ms=len(main_audio),
+        candidates=candidate_payload,
     )
 
     promo_audio = analysis.standardize_audio(
         tts.synthesize_audio(
             tts.TTSRequest(
                 voice_id=args.voice_id,
-                text=llm_result.promo_text,
+                text=llm_result.refined_sponsor_text or sponsor_text,
                 url=args.tts_url,
                 model_id=args.tts_model_id,
                 output_format=args.tts_output_format,
@@ -225,21 +242,26 @@ def run() -> None:
     if len(promo_audio) > 20000:
         raise RuntimeError("Promo audio is longer than 20 seconds; please shorten it.")
 
-    if llm_result.chosen_index is not None:
-        if 0 <= llm_result.chosen_index < len(candidates_for_prompt):
-            chosen_ms = candidates_for_prompt[llm_result.chosen_index]
-            if chosen_ms < min_insert_ms:
-                chosen_ms = analysis.choose_default_insertion(
-                    candidates_for_prompt, min_offset_ms=min_insert_ms
-                )
-            max_allowed = max(0, len(main_audio) - end_buffer_ms)
-            if chosen_ms > max_allowed:
-                chosen_ms = analysis.choose_default_insertion(
-                    candidates_for_prompt, min_offset_ms=min_insert_ms
-                )
+    if 0 <= llm_result.chosen_candidate_index < len(candidates_for_prompt):
+        chosen_ms = candidates_for_prompt[llm_result.chosen_candidate_index]
+        if chosen_ms < min_insert_ms:
+            chosen_ms = analysis.choose_default_insertion(
+                candidates_for_prompt, min_offset_ms=min_insert_ms
+            )
+        max_allowed = max(0, len(main_audio) - end_buffer_ms)
+        if chosen_ms > max_allowed:
+            chosen_ms = analysis.choose_default_insertion(
+                candidates_for_prompt, min_offset_ms=min_insert_ms
+            )
 
-    transcript_before = snippets.get(chosen_ms, "TRANSCRIPT_UNAVAILABLE")
-    if analysis.whisper_available() and not transcript_before and args.mode == "podcast":
+    transcript_before = transcripts.get(chosen_ms, {}).get(
+        "before", "TRANSCRIPT_UNAVAILABLE"
+    )
+    if (
+        analysis.whisper_available()
+        and not transcript_before
+        and args.mode == "podcast"
+    ):
         transcript_before = analysis.transcribe_snippet(
             main_audio, chosen_ms - 15000, chosen_ms
         )
@@ -281,8 +303,7 @@ def run() -> None:
             "min_insert_ms": min_insert_ms,
             "end_buffer_ms": end_buffer_ms,
             "transcript_snippet_before": transcript_before,
-            "llm_prompt": llm_result.prompt[:500],
-            "llm_output_text": llm_result.raw_text,
+            "llm_debug": llm_result.debug,
         }
         (args.debug_dir / "debug.json").write_text(
             json.dumps(debug_payload, indent=2)
@@ -292,7 +313,7 @@ def run() -> None:
         print(
             f"Dry run: insertion at {chosen_ms}ms. Rationale: {llm_result.rationale}"
         )
-        print(f"Promo text: {llm_result.promo_text}")
+        print(f"Sponsor text: {llm_result.refined_sponsor_text or sponsor_text}")
         return
 
     _merge_with_api(
@@ -314,7 +335,7 @@ def run() -> None:
         )
 
     print(f"Wrote output: {args.out}")
-    print(f"Promo text: {llm_result.promo_text}")
+    print(f"Sponsor text: {llm_result.refined_sponsor_text or sponsor_text}")
 
 
 if __name__ == "__main__":

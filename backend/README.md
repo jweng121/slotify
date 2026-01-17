@@ -9,7 +9,7 @@ prompt engineering for intelligent choice of insertion point
 `__init__.py` exposes the package modules (analysis, llm, mix) and version.
 `analysis.py` handles audio analysis: ffmpeg check, loading/standardizing audio, silence-based candidate detection for podcasts, beat/RMS analysis for songs, optional Whisper transcription, and building candidate payloads.
 `cli.py` provides the CLI workflow: parse args, pick candidates, call LLM to write promo/choose insertion, loudness match + room tone + crossfade, and export output (plus debug artifacts).
-`llm.py` builds the prompt and calls OpenAI to generate promo text and choose insertion index; parses JSON response into LLMResult.
+`llm.py` calls OpenAI (structured output) to choose the best insertion point and optionally refine sponsor text, with a heuristic fallback.
 `mix.py` does audio mixing utilities: LUFS measurement, loudness matching, looping room tone, ducking, crossfade insertion, and context window extraction.
 
 ## Install
@@ -65,7 +65,7 @@ python -m ad_inserter.cli \
 
 Semantic context (podcasts):
 - Uses Whisper locally (if installed) to transcribe short context windows around candidate insertion points.
-- The LLM selects the best insertion point based on topic transitions and sentence boundaries, and writes a 1-sentence promo matching the tone.
+- The LLM selects the best insertion point based on topic transitions and sentence boundaries, and can lightly refine the sponsor line to match tone.
 - If Whisper is not available, it falls back to silence-based insertion.
 
 Rhythmic context (songs):

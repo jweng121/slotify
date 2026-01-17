@@ -35,13 +35,23 @@ def standardize_audio(audio: AudioSegment) -> AudioSegment:
     return audio.set_frame_rate(44100).set_channels(2)
 
 
-def detect_podcast_candidates(audio: AudioSegment) -> List[int]:
+def detect_silence_ranges(
+    audio: AudioSegment, min_silence_len: int = 500
+) -> List[tuple[int, int]]:
     silence_thresh = audio.dBFS - 16 if audio.dBFS != float("-inf") else -40
-    silence_ranges = detect_silence(
-        audio, min_silence_len=500, silence_thresh=silence_thresh
+    return detect_silence(
+        audio, min_silence_len=min_silence_len, silence_thresh=silence_thresh
     )
+
+
+def candidates_from_silence_ranges(silence_ranges: List[tuple[int, int]]) -> List[int]:
     candidates = [(start + end) // 2 for start, end in silence_ranges]
     return sorted(set(candidates))
+
+
+def detect_podcast_candidates(audio: AudioSegment) -> List[int]:
+    silence_ranges = detect_silence_ranges(audio)
+    return candidates_from_silence_ranges(silence_ranges)
 
 
 def _rms_minima_times(
@@ -135,6 +145,36 @@ def transcribe_snippet(
             pass
 
 
+def _clip_text(text: str, max_chars: int, from_end: bool = False) -> str:
+    if len(text) <= max_chars:
+        return text
+    if from_end:
+        return text[-max_chars:]
+    return text[:max_chars]
+
+
+def build_transcript_snippets(
+    audio: AudioSegment,
+    candidates: List[int],
+    window_ms: int = 15000,
+    max_chars: int = 260,
+    model_name: str = "base",
+    max_candidates: Optional[int] = None,
+) -> Dict[int, Dict[str, str]]:
+    if not candidates:
+        return {}
+    limited = candidates if max_candidates is None else candidates[:max_candidates]
+    snippets: Dict[int, Dict[str, str]] = {}
+    for cand in limited:
+        before = transcribe_snippet(audio, cand - window_ms, cand, model_name=model_name)
+        after = transcribe_snippet(audio, cand, cand + window_ms, model_name=model_name)
+        snippets[cand] = {
+            "before": _clip_text(before, max_chars, from_end=True),
+            "after": _clip_text(after, max_chars, from_end=False),
+        }
+    return snippets
+
+
 def choose_default_insertion(candidates: List[int], min_offset_ms: int = 30000) -> int:
     if not candidates:
         return min_offset_ms
@@ -144,10 +184,66 @@ def choose_default_insertion(candidates: List[int], min_offset_ms: int = 30000) 
     return sorted(candidates)[-1]
 
 
+def _segment_rms(audio: AudioSegment, start_ms: int, end_ms: int) -> float:
+    start_ms = max(0, start_ms)
+    end_ms = max(start_ms, end_ms)
+    segment = audio[start_ms:end_ms]
+    if len(segment) == 0:
+        return 0.0
+    return float(segment.rms)
+
+
+def _silence_ms_for_candidate(
+    candidate_ms: int, silence_ranges: Optional[List[tuple[int, int]]]
+) -> int:
+    if not silence_ranges:
+        return 0
+    for start_ms, end_ms in silence_ranges:
+        if start_ms <= candidate_ms <= end_ms:
+            return int(end_ms - start_ms)
+    return 0
+
+
+def _is_beat_aligned(
+    candidate_ms: int,
+    beat_times_ms: Optional[List[int]],
+    tolerance_ms: int,
+) -> bool:
+    if not beat_times_ms:
+        return False
+    return any(abs(candidate_ms - beat) <= tolerance_ms for beat in beat_times_ms)
+
+
 def build_candidate_payload(
-    candidates: List[int], snippets: Dict[int, str]
+    audio: AudioSegment,
+    candidates: List[int],
+    mode: str,
+    beat_times_ms: Optional[List[int]] = None,
+    silence_ranges: Optional[List[tuple[int, int]]] = None,
+    transcripts: Optional[Dict[int, Dict[str, str]]] = None,
+    rms_window_ms: int = 400,
+    beat_tolerance_ms: int = 60,
 ) -> List[Dict[str, Any]]:
-    payload = []
-    for cand in candidates:
-        payload.append({"ms": cand, "snippet": snippets.get(cand, "")})
+    payload: List[Dict[str, Any]] = []
+    transcripts = transcripts or {}
+    for idx, cand in enumerate(candidates):
+        transcript = transcripts.get(cand, {})
+        payload.append(
+            {
+                "index": idx,
+                "insertion_ms": int(cand),
+                "silence_ms": _silence_ms_for_candidate(cand, silence_ranges),
+                "rms_before": _segment_rms(audio, cand - rms_window_ms, cand),
+                "rms_after": _segment_rms(audio, cand, cand + rms_window_ms),
+                "beat_aligned": _is_beat_aligned(
+                    cand, beat_times_ms, tolerance_ms=beat_tolerance_ms
+                )
+                if mode == "song"
+                else False,
+                "transcript_before": transcript.get(
+                    "before", "TRANSCRIPT_UNAVAILABLE"
+                ),
+                "transcript_after": transcript.get("after", "TRANSCRIPT_UNAVAILABLE"),
+            }
+        )
     return payload
