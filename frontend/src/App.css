@@ -310,8 +310,8 @@
   border-radius: 12px;
   display: grid;
   place-items: center;
-  background: rgba(79, 70, 229, 0.2);
-  border: 1px solid rgba(139, 92, 246, 0.5);
+  background: linear-gradient(135deg, rgba(124, 92, 255, 0.35), rgba(79, 70, 229, 0.2));
+  border: 1px solid rgba(139, 92, 246, 0.6);
 }
 
 .logo-text {
