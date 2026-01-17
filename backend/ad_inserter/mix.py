@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
 import numpy as np
 import pyloudnorm as pyln
 from pydub import AudioSegment
 
+from services.audio_edit import insert_ad
 
 @dataclass
 class LoudnessMatch:
@@ -95,3 +97,34 @@ def context_window(
     start = max(0, center_ms - window_ms)
     end = min(len(audio), center_ms + window_ms)
     return audio[start:end]
+
+
+def render_stitched_output(
+    main_path: str,
+    promo_path: str,
+    insert_time_s: float,
+    out_path: str,
+    duck_db: float = 0.0,
+) -> str:
+    """
+    Applies any lightweight mixing steps (optional ducking/fades later),
+    then calls insert_ad(...) to stitch + export.
+    Returns out_path.
+    """
+    main_file = Path(main_path)
+    promo_file = Path(promo_path)
+    out_file = Path(out_path)
+
+    if not main_file.is_file():
+        raise FileNotFoundError(f"Main audio file not found: {main_file}")
+    if not promo_file.is_file():
+        raise FileNotFoundError(f"Promo audio file not found: {promo_file}")
+
+    out_file.parent.mkdir(parents=True, exist_ok=True)
+    _ = duck_db
+    return insert_ad(
+        podcast_path=str(main_file),
+        ad_path=str(promo_file),
+        insert_time=insert_time_s,
+        output_path=str(out_file),
+    )

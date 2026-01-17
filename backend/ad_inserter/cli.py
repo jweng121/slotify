@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import tempfile
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -87,6 +88,8 @@ def run() -> None:
         if 0 <= llm_result.chosen_index < len(candidates):
             chosen_ms = candidates[llm_result.chosen_index]
 
+    insert_time_s = chosen_ms / 1000.0
+
     transcript_before = snippets.get(chosen_ms, "TRANSCRIPT_UNAVAILABLE")
     if analysis.whisper_available() and not transcript_before and args.mode == "podcast":
         transcript_before = analysis.transcribe_snippet(
@@ -106,15 +109,30 @@ def run() -> None:
 
     promo_processed = mix.apply_room_tone(promo_processed, room_tone)
 
-    merged = mix.insert_with_crossfade(
-        main_audio, promo_processed, chosen_ms, duck_db=args.duck_db
-    )
+    if args.dry_run:
+        print(
+            f"Dry run: insertion at {insert_time_s:.3f}s. Rationale: {llm_result.rationale}"
+        )
+        print(f"Promo text: {llm_result.promo_text}")
+        return
+
+    with tempfile.TemporaryDirectory(prefix="promo_processed_") as tmp_dir:
+        tmp_promo = Path(tmp_dir) / "promo.wav"
+        promo_processed.export(tmp_promo, format="wav")
+        output_path = mix.render_stitched_output(
+            main_path=str(args.main),
+            promo_path=str(tmp_promo),
+            insert_time_s=insert_time_s,
+            out_path=str(args.out),
+            duck_db=args.duck_db,
+        )
 
     if args.debug_dir:
         _ensure_debug_dir(args.debug_dir)
         context_audio.export(args.debug_dir / "context.wav", format="wav")
         promo_audio.export(args.debug_dir / "promo_raw.wav", format="wav")
         promo_processed.export(args.debug_dir / "promo_matched.wav", format="wav")
+        merged = AudioSegment.from_file(output_path)
         preview_start = max(0, chosen_ms - 5000)
         preview_end = min(len(merged), chosen_ms + 5000)
         merged[preview_start:preview_end].export(
@@ -143,15 +161,7 @@ def run() -> None:
             json.dumps(debug_payload, indent=2)
         )
 
-    if args.dry_run:
-        print(
-            f"Dry run: insertion at {chosen_ms}ms. Rationale: {llm_result.rationale}"
-        )
-        print(f"Promo text: {llm_result.promo_text}")
-        return
-
-    merged.export(args.out, format="mp3")
-    print(f"Wrote output: {args.out}")
+    print(f"Wrote output: {output_path}")
     print(f"Promo text: {llm_result.promo_text}")
 
 
