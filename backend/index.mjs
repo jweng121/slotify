@@ -149,16 +149,75 @@ app.post(
       await fs.promises.writeFile(basePath, audioFile.buffer);
       await fs.promises.writeFile(insertPath, insertFile.buffer);
 
+      // Get main audio duration to validate and clamp insertAt
+      const getDuration = async (filePath) => {
+        return new Promise((resolve, reject) => {
+          const process = spawn("ffprobe", [
+            "-v", "error",
+            "-show_entries", "format=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1",
+            filePath,
+          ], { stdio: ["ignore", "pipe", "pipe"] });
+          let stdout = "";
+          let stderr = "";
+          process.stdout.on("data", (chunk) => { stdout += chunk.toString(); });
+          process.stderr.on("data", (chunk) => { stderr += chunk.toString(); });
+          process.on("error", reject);
+          process.on("close", (code) => {
+            if (code === 0) {
+              const duration = Number.parseFloat(stdout.trim());
+              resolve(Number.isFinite(duration) && duration > 0 ? duration : null);
+            } else {
+              reject(new Error(stderr || `ffprobe exited with code ${code}`));
+            }
+          });
+        });
+      };
+
+      const mainDuration = await getDuration(basePath);
+      const adDuration = await getDuration(insertPath);
+
+      // Validate and clamp insertAt
+      let clampedInsertAt = insertAt;
+      if (mainDuration !== null) {
+        if (clampedInsertAt < 0) {
+          clampedInsertAt = 0;
+        } else if (clampedInsertAt > mainDuration) {
+          clampedInsertAt = mainDuration;
+        }
+      }
+
+      // Debug logging
+      console.log("Merge debug:", {
+        mainDuration: mainDuration?.toFixed(3),
+        insertAt: insertAt.toFixed(3),
+        clampedInsertAt: clampedInsertAt.toFixed(3),
+        adDuration: adDuration?.toFixed(3),
+        leftDuration: clampedInsertAt.toFixed(3),
+        rightDuration: mainDuration !== null ? (mainDuration - clampedInsertAt).toFixed(3) : "unknown",
+      });
+
       let filter;
+      // Use explicit start:end syntax for atrim to ensure correct trimming
+      // Split the main audio into two streams for independent trimming
       const baseSplit =
         `[0:a]aresample=44100,aformat=channel_layouts=mono,` +
         `asplit=2[ahead][atail]`;
+      
+      // Left segment: from 0 to insertAt
       const baseHead =
-        `[ahead]atrim=end=${insertAt},loudnorm=I=-16:TP=-1.5:LRA=11,` +
+        `[ahead]atrim=start=0:end=${clampedInsertAt},loudnorm=I=-16:TP=-1.5:LRA=11,` +
         `asetpts=PTS-STARTPTS[a0]`;
+      
+      // Right segment: from insertAt to end (use explicit end if we have duration)
+      const baseTailEnd = mainDuration !== null 
+        ? `:end=${mainDuration}` 
+        : "";
       const baseTail =
-        `[atail]atrim=start=${insertAt},loudnorm=I=-16:TP=-1.5:LRA=11,` +
+        `[atail]atrim=start=${clampedInsertAt}${baseTailEnd},loudnorm=I=-16:TP=-1.5:LRA=11,` +
         `asetpts=PTS-STARTPTS[a1]`;
+      
+      // Insert audio processing
       const insert =
         `[1:a]aresample=44100,aformat=channel_layouts=mono,` +
         `loudnorm=I=-16:TP=-1.5:LRA=11,asetpts=PTS-STARTPTS[ins]`;
@@ -210,6 +269,22 @@ app.post(
 
       await runFfmpeg(args);
       await fs.promises.access(outPath);
+      
+      // Log final duration for verification
+      const finalDuration = await getDuration(outPath).catch(() => null);
+      if (finalDuration !== null) {
+        const expectedDuration = mainDuration !== null && adDuration !== null
+          ? clampedInsertAt + adDuration + (mainDuration - clampedInsertAt)
+          : null;
+        console.log("Merge result:", {
+          finalDuration: finalDuration.toFixed(3),
+          expectedDuration: expectedDuration?.toFixed(3),
+          match: expectedDuration !== null 
+            ? Math.abs(finalDuration - expectedDuration) < 0.1 
+            : "unknown",
+        });
+      }
+      
       res.setHeader("Content-Type", "audio/mpeg");
 
       const stream = fs.createReadStream(outPath);
