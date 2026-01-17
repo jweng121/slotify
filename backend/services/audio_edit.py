@@ -61,6 +61,7 @@ def insert_ad(
     duration = get_duration_seconds(str(podcast_file))
     if insert_time >= duration - 0.1:
         insert_time = duration
+    insert_time = max(0.0, min(insert_time, duration))
 
     with tempfile.TemporaryDirectory(prefix="audio_edit_") as tmp_dir:
         tmp = Path(tmp_dir)
@@ -69,6 +70,14 @@ def insert_ad(
         ad_wav = tmp / "ad.wav"
         concat_list = tmp / "concat.txt"
 
+        common_args = [
+            "-ac",
+            "2",
+            "-ar",
+            "44100",
+            "-c:a",
+            "pcm_s16le",
+        ]
         run_cmd(
             [
                 "ffmpeg",
@@ -77,6 +86,7 @@ def insert_ad(
                 str(podcast_file),
                 "-t",
                 f"{insert_time}",
+                *common_args,
                 str(left_wav),
             ]
         )
@@ -90,6 +100,7 @@ def insert_ad(
                     str(podcast_file),
                     "-ss",
                     f"{insert_time}",
+                    *common_args,
                     str(right_wav),
                 ]
             )
@@ -102,6 +113,7 @@ def insert_ad(
                 "-y",
                 "-i",
                 str(ad_file),
+                *common_args,
                 str(ad_wav),
             ]
         )
