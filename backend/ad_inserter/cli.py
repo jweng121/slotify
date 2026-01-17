@@ -11,8 +11,6 @@ from ad_inserter import analysis, llm, mix
 
 
 def _default_model(provider: str) -> str:
-    if provider == "none":
-        return "gpt-4o-mini"
     return "gpt-4o-mini"
 
 
@@ -41,7 +39,7 @@ def run() -> None:
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--debug-dir", type=Path)
-    parser.add_argument("--llm-provider", choices=["openai", "none"], default="openai")
+    parser.add_argument("--llm-provider", choices=["openai"], default="openai")
     parser.add_argument("--llm-model", default=None)
     parser.add_argument("--duck-db", type=float, default=0.0)
 
