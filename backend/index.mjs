@@ -218,87 +218,37 @@ app.post(
       }
 
       // Debug logging
+      const expectedDuration =
+        mainDuration !== null && adDuration !== null
+          ? mainDuration + adDuration
+          : null;
       console.log("Merge debug:", {
         mainDuration: mainDuration?.toFixed(3),
+        insertDuration: adDuration?.toFixed(3),
         insertAt: insertAt.toFixed(3),
-        clampedInsertAt: clampedInsertAt.toFixed(3),
-        adDuration: adDuration?.toFixed(3),
-        leftDuration: clampedInsertAt.toFixed(3),
-        rightDuration: mainDuration !== null ? (mainDuration - clampedInsertAt).toFixed(3) : "unknown",
+        expectedDuration: expectedDuration?.toFixed(3),
       });
 
-      let filter;
-      // CRITICAL FIX: Use separate input streams for left and right segments
-      // Input 0: main audio (for left segment 0 to insertAt)
-      // Input 2: main audio seeked to insertAt (for right segment insertAt to end)
-      // This ensures the right segment truly starts from insertAt, not from 0
-      
-      // Left segment: from input 0, trim from 0 to insertAt
-      const baseHead =
-        `[0:a]aresample=44100,aformat=channel_layouts=mono,` +
-        `atrim=start=0:end=${clampedInsertAt},` +
-        `loudnorm=I=-16:TP=-1.5:LRA=11,` +
-        `asetpts=PTS-STARTPTS[a0]`;
-      
-      // Right segment: from input 2 (already seeked to insertAt), trim to end
-      // Since input 2 is seeked with -ss, it already starts at insertAt
-      // We just need to trim to the end if we know the duration
-      const rightEnd = mainDuration !== null 
-        ? (mainDuration - clampedInsertAt)  // Duration from insertAt to end
-        : null;
-      const baseTail = rightEnd !== null
-        ? `[2:a]aresample=44100,aformat=channel_layouts=mono,` +
-          `atrim=start=0:end=${rightEnd},` +
-          `loudnorm=I=-16:TP=-1.5:LRA=11,` +
-          `asetpts=PTS-STARTPTS[a1]`
-        : `[2:a]aresample=44100,aformat=channel_layouts=mono,` +
-          `loudnorm=I=-16:TP=-1.5:LRA=11,` +
-          `asetpts=PTS-STARTPTS[a1]`;
-      
-      // Insert audio processing
-      const insert =
-        `[1:a]aresample=44100,aformat=channel_layouts=mono,` +
-        `loudnorm=I=-16:TP=-1.5:LRA=11,asetpts=PTS-STARTPTS[ins]`;
+      const filter = [
+        `[0:a]aformat=sample_rates=44100:channel_layouts=stereo,` +
+          `atrim=0:${clampedInsertAt},asetpts=PTS-STARTPTS[a0]`,
+        `[0:a]aformat=sample_rates=44100:channel_layouts=stereo,` +
+          `atrim=${clampedInsertAt},asetpts=PTS-STARTPTS[a1]`,
+        `[1:a]aformat=sample_rates=44100:channel_layouts=stereo,` +
+          `asetpts=PTS-STARTPTS[ad]`,
+        `[a0][ad][a1]concat=n=3:v=0:a=1[out]`,
+      ].join(";");
 
-      if (pause > 0) {
-        filter = [
-          baseHead,
-          baseTail,
-          insert,
-          `anullsrc=r=44100:cl=mono,atrim=0:${pause}[sil]`,
-          `[a0][sil][ins][sil][a1]concat=n=5:v=0:a=1[aout]`,
-        ].join(";");
-      } else if (crossfade > 0) {
-        filter = [
-          baseHead,
-          baseTail,
-          insert,
-          `[a0][ins]acrossfade=d=${crossfade}:curve1=tri:curve2=tri[a01]`,
-          `[a01][a1]acrossfade=d=${crossfade}:curve1=tri:curve2=tri[aout]`,
-        ].join(";");
-      } else {
-        filter = [
-          baseHead,
-          baseTail,
-          insert,
-          `[a0][ins][a1]concat=n=3:v=0:a=1[aout]`,
-        ].join(";");
-      }
-
-      // Use separate input streams with seek for more reliable trimming
-      // Input 0: main audio (used for left segment)
+      // Input 0: main audio
       // Input 1: insert audio
-      // Input 2: main audio again (used for right segment, seeked to insertAt)
       const args = [
         "-y",
-        "-i", basePath,                    // [0:a] - main audio for left segment
-        "-i", insertPath,                  // [1:a] - insert audio
-        "-ss", clampedInsertAt.toString(),  // Seek to insertAt
-        "-i", basePath,                    // [2:a] - main audio for right segment (seeked)
+        "-i", basePath,
+        "-i", insertPath,
         "-filter_complex",
         filter,
         "-map",
-        "[aout]",
+        "[out]",
         "-c:a",
         "libmp3lame",
         "-q:a",
@@ -312,15 +262,13 @@ app.post(
       // Log final duration for verification
       const finalDuration = await getDuration(outPath).catch(() => null);
       if (finalDuration !== null) {
-        const expectedDuration = mainDuration !== null && adDuration !== null
-          ? clampedInsertAt + adDuration + (mainDuration - clampedInsertAt)
-          : null;
         console.log("Merge result:", {
           finalDuration: finalDuration.toFixed(3),
           expectedDuration: expectedDuration?.toFixed(3),
-          match: expectedDuration !== null 
-            ? Math.abs(finalDuration - expectedDuration) < 0.1 
-            : "unknown",
+          match:
+            expectedDuration !== null
+              ? Math.abs(finalDuration - expectedDuration) < 0.1
+              : "unknown",
         });
       }
       

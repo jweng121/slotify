@@ -24,7 +24,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Test parameters
 const MAIN_DURATION = 10; // seconds
 const AD_DURATION = 2; // seconds
-const INSERT_TIME = 3; // seconds
+const INSERT_TIME = 5; // seconds
 const EXPECTED_FINAL_DURATION = MAIN_DURATION + AD_DURATION; // 12 seconds
 
 async function runCommand(command, args) {
@@ -100,11 +100,13 @@ async function testMerge() {
     
     // Test the filter chain directly
     const filter = [
-      `[0:a]aresample=44100,aformat=channel_layouts=mono,asplit=2[ahead][atail]`,
-      `[ahead]atrim=start=0:end=${INSERT_TIME},asetpts=PTS-STARTPTS[a0]`,
-      `[atail]atrim=start=${INSERT_TIME}:end=${MAIN_DURATION},asetpts=PTS-STARTPTS[a1]`,
-      `[1:a]aresample=44100,aformat=channel_layouts=mono,asetpts=PTS-STARTPTS[ins]`,
-      `[a0][ins][a1]concat=n=3:v=0:a=1[aout]`,
+      `[0:a]aformat=sample_rates=44100:channel_layouts=stereo,` +
+        `atrim=0:${INSERT_TIME},asetpts=PTS-STARTPTS[a0]`,
+      `[0:a]aformat=sample_rates=44100:channel_layouts=stereo,` +
+        `atrim=${INSERT_TIME},asetpts=PTS-STARTPTS[a1]`,
+      `[1:a]aformat=sample_rates=44100:channel_layouts=stereo,` +
+        `asetpts=PTS-STARTPTS[ad]`,
+      `[a0][ad][a1]concat=n=3:v=0:a=1[aout]`,
     ].join(";");
     
     await runCommand("ffmpeg", [
@@ -134,7 +136,7 @@ async function testMerge() {
     // Analyze the merged audio to check for repetition
     // We'll check if the frequency pattern matches expected structure
     console.log("\nAnalyzing merged audio structure...");
-    console.log("Expected structure: [main 0-3s] + [ad 2s] + [main 3-10s]");
+    console.log("Expected structure: [main 0-5s] + [ad 2s] + [main 5-10s]");
     console.log("If the audio repeats from the beginning, the duration would be ~22s instead of 12s");
     
     if (mergedDuration !== null && Math.abs(mergedDuration - EXPECTED_FINAL_DURATION) < 0.5) {
