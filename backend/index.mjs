@@ -228,23 +228,26 @@ app.post(
       });
 
       let filter;
-      // Use explicit start:end syntax for atrim to ensure correct trimming
-      // Split the main audio into two streams for independent trimming
-      const baseSplit =
-        `[0:a]aresample=44100,aformat=channel_layouts=mono,` +
-        `asplit=2[ahead][atail]`;
+      // CRITICAL FIX: Use the input stream twice with separate trim operations
+      // This ensures the right segment is properly trimmed from insertAt to end
+      // Instead of using asplit (which might cause issues), we reference [0:a] twice
       
       // Left segment: from 0 to insertAt
       const baseHead =
-        `[ahead]atrim=start=0:end=${clampedInsertAt},loudnorm=I=-16:TP=-1.5:LRA=11,` +
+        `[0:a]aresample=44100,aformat=channel_layouts=mono,` +
+        `atrim=start=0:end=${clampedInsertAt},` +
+        `loudnorm=I=-16:TP=-1.5:LRA=11,` +
         `asetpts=PTS-STARTPTS[a0]`;
       
-      // Right segment: from insertAt to end (use explicit end if we have duration)
-      const baseTailEnd = mainDuration !== null 
-        ? `:end=${mainDuration}` 
-        : "";
+      // Right segment: from insertAt to end
+      // CRITICAL: Always use explicit end value to ensure proper trimming
+      const rightEnd = mainDuration !== null 
+        ? mainDuration 
+        : (clampedInsertAt + 3600); // Fallback to 1 hour if duration unknown
       const baseTail =
-        `[atail]atrim=start=${clampedInsertAt}${baseTailEnd},loudnorm=I=-16:TP=-1.5:LRA=11,` +
+        `[0:a]aresample=44100,aformat=channel_layouts=mono,` +
+        `atrim=start=${clampedInsertAt}:end=${rightEnd},` +
+        `loudnorm=I=-16:TP=-1.5:LRA=11,` +
         `asetpts=PTS-STARTPTS[a1]`;
       
       // Insert audio processing
@@ -254,7 +257,6 @@ app.post(
 
       if (pause > 0) {
         filter = [
-          baseSplit,
           baseHead,
           baseTail,
           insert,
@@ -263,7 +265,6 @@ app.post(
         ].join(";");
       } else if (crossfade > 0) {
         filter = [
-          baseSplit,
           baseHead,
           baseTail,
           insert,
@@ -272,7 +273,6 @@ app.post(
         ].join(";");
       } else {
         filter = [
-          baseSplit,
           baseHead,
           baseTail,
           insert,
