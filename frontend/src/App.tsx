@@ -111,7 +111,7 @@ function UploadDropzone({
         ) : (
           <svg viewBox="0 0 24 24" role="presentation">
             <path
-              d="M12 3a1 1 0 0 1 1 1v8.6l2.3-2.3a1 1 0 1 1 1.4 1.4l-4.01 4a1 1 0 0 1-1.38 0l-4.01-4a1 1 0 1 1 1.42-1.4L11 12.6V4a1 1 0 0 1 1-1z"
+              d="M12 3a1 1 0 0 1 1 1v8.6l2.3-2.3a1 1 0 1 1 1.4 1.4l-4.01 4a1 1 0 0 1-1.38 0l-4.01-4a1 1 0 0 1 1.42-1.4L11 12.6V4a1 1 0 0 1 1-1z"
               fill="currentColor"
             />
             <path
@@ -685,7 +685,7 @@ function App() {
   return (
     <div className={`app page-${activePage}`}>
       <header className="topbar">
-        <a href='/' className="logo">Sl|lotify</a>
+        <a href='/' className="logo ">Slotify</a>
         <div className="nav-steps">
           {timelineSteps.map((step) => (
             <button
@@ -723,7 +723,7 @@ function App() {
               <span className="hero-dot" />
               AI-Powered Audio Insertion
             </div>
-            <a className="hero-title">Sl|lotify</a>
+            <a className="hero-title">Slotify</a>
             <p className="hero-subtitle">
               Seamless sponsor insertion for audio.
             </p>
@@ -737,7 +737,7 @@ function App() {
                 className="primary hero-primary"
                 onClick={() => setActivePage("upload")}
               >
-                Try Sl|lotify
+                Try Slotify
               </button>
               <button
                 type="button"
