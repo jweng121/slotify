@@ -20,15 +20,6 @@ const LandingHero = ({
     <section className="landing-hero-section">
       <SoundwaveBackground isActive={isActive} />
       <div className="landing-hero-content">
-        <div className="landing-hero-brand">
-          <span className="landing-hero-mark" aria-hidden="true">
-            <span />
-            <span />
-            <span />
-          </span>
-          <span className="landing-hero-brand-name">Slotify</span>
-        </div>
-
         <div
           className="landing-hero-title-wrap"
           onMouseEnter={() => setIsTitleHover(true)}

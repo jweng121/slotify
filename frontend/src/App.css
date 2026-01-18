@@ -51,6 +51,33 @@
   align-items: center;
 }
 
+.github-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: inherit;
+  text-decoration: none;
+  opacity: 0.7;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  padding: 0.25rem;
+}
+
+.github-link:hover {
+  opacity: 1;
+  transform: scale(1.1);
+}
+
+.app.page-landing .github-link {
+  color: #f6efe6;
+}
+
+.app.page-upload .github-link,
+.app.page-analyze .github-link,
+.app.page-preview .github-link,
+.app.page-export .github-link {
+  color: #f6efe6;
+}
+
 .nav-button {
   border: 1px solid rgba(199, 107, 58, 0.35);
   background: transparent;
