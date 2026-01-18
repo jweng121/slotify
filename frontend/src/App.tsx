@@ -170,6 +170,10 @@ function App() {
   const [rightsCertified, setRightsCertified] = useState(false);
   const [selectedTone, setSelectedTone] = useState("professional");
   const [selectedLanguage, setSelectedLanguage] = useState("en");
+  const [showAddSlot, setShowAddSlot] = useState(false);
+  const [newSlotTime, setNewSlotTime] = useState("");
+  const [newSlotMinutes, setNewSlotMinutes] = useState("0");
+  const [newSlotSeconds, setNewSlotSeconds] = useState("0");
 
   const baseAudioName = useMemo(
     () => baseAudio?.name ?? "No file selected.",
@@ -262,7 +266,11 @@ function App() {
     if (audioDuration && audioDuration > 0) {
       ctx.lineWidth = 2;
       for (const slot of slots) {
-        const x = (slot.time / audioDuration) * width;
+        if (!audioDuration || audioDuration <= 0) continue;
+        const ratio = slot.time / audioDuration;
+        if (!Number.isFinite(ratio)) continue;
+        const clamped = Math.max(0, Math.min(1, ratio));
+        const x = clamped * (width - 1) + 0.5;
         if (Number.isFinite(x)) {
           ctx.strokeStyle = selectedSlotIds.includes(slot.id)
             ? "rgba(79, 181, 120, 0.85)"
@@ -275,8 +283,16 @@ function App() {
       }
 
       const selectedInsert = Number.parseFloat(insertAt);
-      if (Number.isFinite(selectedInsert) && selectedInsert >= 0) {
-        const x = (selectedInsert / audioDuration) * width;
+      if (
+        audioDuration &&
+        audioDuration > 0 &&
+        Number.isFinite(selectedInsert) &&
+        selectedInsert >= 0
+      ) {
+        const ratio = selectedInsert / audioDuration;
+        if (!Number.isFinite(ratio)) return;
+        const clamped = Math.max(0, Math.min(1, ratio));
+        const x = clamped * (width - 1) + 0.5;
         if (Number.isFinite(x)) {
           ctx.strokeStyle = "rgba(245, 157, 0, 0.95)";
           ctx.beginPath();
@@ -372,11 +388,17 @@ function App() {
       insertSuggestions.length >= 3
         ? insertSuggestions.slice(0, 3)
         : fallbackSlots;
-    const nextSlots = suggestions.map((entry, index) => ({
-      id: `slot-${index + 1}`,
-      time: entry.time,
-      confidence: entry.confidence,
-    }));
+    const nextSlots = suggestions.map((entry, index) => {
+      const clampedTime =
+        audioDuration && audioDuration > 0
+          ? Math.min(Math.max(0, entry.time), audioDuration)
+          : Math.max(0, entry.time);
+      return {
+        id: `slot-${index + 1}`,
+        time: clampedTime,
+        confidence: entry.confidence,
+      };
+    });
     setSlots(nextSlots);
     if (!selectedSlotIds.length && nextSlots.length) {
       setSelectedSlotIds([nextSlots[0].id]);
@@ -958,7 +980,10 @@ function App() {
                       }`}
                       style={{
                         left: audioDuration
-                          ? `${(slot.time / audioDuration) * 100}%`
+                          ? `calc(${Math.min(
+                              100,
+                              Math.max(0, (slot.time / audioDuration) * 100),
+                            )}% - 8px)`
                           : "50%",
                       }}
                       onClick={() => toggleSlotSelection(slot.id)}
@@ -975,6 +1000,93 @@ function App() {
             {analysisError && (
               <span className="helper helper-error">{analysisError}</span>
             )}
+
+            {/* Add Slot Section */}
+            <div className="add-slot-section">
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setShowAddSlot(!showAddSlot)}
+              >
+                {showAddSlot ? "Cancel" : "+ Add Custom Slot"}
+              </button>
+              {showAddSlot && (
+                <div className="add-slot-form">
+                  <div className="add-slot-inputs">
+                    <div className="field">
+                      <label htmlFor="slot-minutes">Minutes</label>
+                      <input
+                        id="slot-minutes"
+                        type="number"
+                        min="0"
+                        value={newSlotMinutes}
+                        onChange={(e) => setNewSlotMinutes(e.target.value)}
+                        placeholder="0"
+                      />
+                    </div>
+                    <div className="field">
+                      <label htmlFor="slot-seconds">Seconds</label>
+                      <input
+                        id="slot-seconds"
+                        type="number"
+                        min="0"
+                        max="59"
+                        value={newSlotSeconds}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === "" || (parseInt(val) >= 0 && parseInt(val) <= 59)) {
+                            setNewSlotSeconds(val);
+                          }
+                        }}
+                        placeholder="0"
+                      />
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="primary"
+                    onClick={() => {
+                      const minutes = parseInt(newSlotMinutes) || 0;
+                      const seconds = parseInt(newSlotSeconds) || 0;
+                      const totalSeconds = minutes * 60 + seconds;
+                      
+                      if (totalSeconds < 0) {
+                        return;
+                      }
+                      
+                      if (audioDuration && totalSeconds > audioDuration) {
+                        alert(`Time cannot exceed audio duration (${formatTime(audioDuration)})`);
+                        return;
+                      }
+
+                      // Generate unique slot ID
+                      const existingIds = slots.map(s => s.id);
+                      let slotNumber = slots.length + 1;
+                      let newSlotId = `slot-${slotNumber}`;
+                      while (existingIds.includes(newSlotId)) {
+                        slotNumber++;
+                        newSlotId = `slot-${slotNumber}`;
+                      }
+
+                      const newSlot: Slot = {
+                        id: newSlotId,
+                        time: totalSeconds,
+                        confidence: 75, // Default confidence for manually added slots
+                      };
+
+                      setSlots((prev) => [...prev, newSlot].sort((a, b) => a.time - b.time));
+                      setNewSlotMinutes("0");
+                      setNewSlotSeconds("0");
+                      setShowAddSlot(false);
+                    }}
+                    disabled={!newSlotMinutes && !newSlotSeconds}
+                  >
+                    Add Slot
+                  </button>
+                </div>
+              )}
+            </div>
+
             <div className="slot-grid">
               {slots.map((slot, index) => {
                 const notes = slotNotes[index] ?? [];

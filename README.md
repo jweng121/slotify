@@ -2,6 +2,8 @@
 
 Pipeline: Upload an audio file with speech → AI recommends the best insertion point(s) → ElevenLabs generates a human-like ad read → the system stitches it in smoothly and exports the final audio.
 
+Demo: https://www.youtube.com/watch?v=S4m1lpipni0
+
 ## Core features
 - User input for podcast audio and product name - product details are optional
 - AI-recommended insertion timestamps using semantic + syntactic analysis
