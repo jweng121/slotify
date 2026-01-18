@@ -18,28 +18,6 @@ def _default_model(provider: str) -> str:
     return "gpt-4o-mini"
 
 
-def _build_snippets(
-    audio: AudioSegment, candidates: List[int], max_snippets: int = 5
-) -> Dict[int, str]:
-    snippets: Dict[int, str] = {}
-    for cand in candidates[:max_snippets]:
-        snippet = analysis.transcribe_snippet(audio, cand - 15000, cand)
-        snippets[cand] = snippet
-    return snippets
-
-
-def _filter_candidates(
-    candidates: List[int],
-    audio_len_ms: int,
-    min_offset_ms: int,
-    end_buffer_ms: int,
-) -> List[int]:
-    if audio_len_ms <= 0:
-        return candidates
-    max_allowed = max(0, audio_len_ms - end_buffer_ms)
-    return [cand for cand in candidates if min_offset_ms <= cand <= max_allowed]
-
-
 def _ensure_debug_dir(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
 
@@ -182,7 +160,7 @@ def run() -> None:
 
     min_insert_ms = 30000
     end_buffer_ms = 15000
-    candidates_for_prompt = _filter_candidates(
+    candidates_for_prompt = analysis.filter_candidates(
         candidates,
         audio_len_ms=len(main_audio),
         min_offset_ms=min_insert_ms,
@@ -193,7 +171,7 @@ def run() -> None:
 
     if args.mode == "podcast":
         if analysis.whisper_available() and candidates_for_prompt:
-            snippets = _build_snippets(main_audio, candidates_for_prompt)
+            snippets = analysis.build_snippets(main_audio, candidates_for_prompt)
 
     chosen_ms = analysis.choose_default_insertion(
         candidates_for_prompt, min_offset_ms=min_insert_ms
