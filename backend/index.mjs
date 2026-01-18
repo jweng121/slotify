@@ -30,15 +30,42 @@ const allowedOrigins = (process.env.CORS_ORIGIN ?? "http://localhost:5173")
   .map((origin) => origin.trim())
   .filter(Boolean);
 
+// In development, also allow common localhost ports
+const devOrigins = [
+  "http://localhost:5173",
+  "http://localhost:5174",
+  "http://localhost:3000",
+  "http://127.0.0.1:5173",
+  "http://127.0.0.1:5174",
+];
+const allAllowedOrigins = process.env.NODE_ENV === "production"
+  ? allowedOrigins
+  : [...new Set([...allowedOrigins, ...devOrigins])];
+
 app.use(
   cors({
     origin(origin, callback) {
-      if (!origin || allowedOrigins.includes(origin)) {
+      // Allow requests with no origin (e.g., mobile apps, Postman, curl, same-origin requests)
+      if (!origin) {
         callback(null, true);
         return;
       }
+      // Check if origin is in allowed list
+      if (allAllowedOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+      // In development, also allow any localhost origin
+      if (process.env.NODE_ENV !== "production" && origin.startsWith("http://localhost:") || origin.startsWith("http://127.0.0.1:")) {
+        console.log(`Allowing localhost origin: ${origin}`);
+        callback(null, true);
+        return;
+      }
+      // Log blocked origins for debugging
+      console.warn(`CORS blocked origin: ${origin}. Allowed: ${allAllowedOrigins.join(", ")}`);
       callback(new Error("CORS blocked"));
     },
+    credentials: true,
   }),
 );
 app.use(express.json({ limit: "2mb" }));
@@ -1372,7 +1399,10 @@ app.post("/api/generate", upload.single("audio"), async (req, res) => {
 
 app.listen(port, () => {
   console.log(`API listening on http://localhost:${port}`);
-  console.log(`CORS allowed origins: ${allowedOrigins.join(", ")}`);
+  console.log(`CORS allowed origins: ${allAllowedOrigins.join(", ") || "none"}`);
+  if (process.env.NODE_ENV !== "production") {
+    console.log("  (Development mode: also allowing all localhost origins)");
+  }
   if (!process.env.ELEVENLABS_API_KEY) {
     console.warn(
       "⚠️  ELEVENLABS_API_KEY not set. Voice cloning and TTS endpoints will fail.",
