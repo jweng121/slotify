@@ -1,6 +1,5 @@
 # Seamless Sponsor Insertion (Audio Monetization Dashboard)
 
-A B2B web application and API that helps platforms (Spotify / YouTube / podcast networks) insert sponsor ads into podcasts seamlessly.  
 Pipeline: Upload a podcast + sponsor script → AI recommends the best insertion point(s) → ElevenLabs generates a human-like ad read → the system stitches it in smoothly and exports the final audio.
 
 ## Core features
