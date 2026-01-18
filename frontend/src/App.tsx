@@ -714,7 +714,7 @@ function App() {
   return (
     <div className={`app page-${activePage}`}>
       <header className="topbar">
-        <a href='/' className="logo" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+        <a href='/' className="logo">
           <SoundwaveIcon size="md" variant={activePage === "landing" ? "light" : "light"} />
           <SlotifyLogo size="md" variant={activePage === "landing" ? "light" : "light"} />
         </a>

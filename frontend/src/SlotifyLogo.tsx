@@ -32,7 +32,8 @@ const SlotifyLogo: React.FC<SlotifyLogoProps> = ({
       className={`slotify-logo ${className}`}
       aria-label="Slotify"
       style={{
-        display: "inline-block",
+        display: "inline-flex",
+        alignItems: "center",
         fontFamily: '"Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
         fontSize: config.fontSize,
         fontWeight: 600,

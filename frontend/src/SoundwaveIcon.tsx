@@ -59,10 +59,10 @@ const SoundwaveIcon: React.FC<SoundwaveIconProps> = ({
       className={`soundwave-icon ${className}`}
       aria-label="Soundwave icon"
       style={{
-        display: "inline-block",
+        display: "inline-flex",
+        alignItems: "center",
         fontSize: config.iconSize,
         lineHeight: 1,
-        verticalAlign: "middle",
       }}
     >
       <span
