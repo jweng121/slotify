@@ -1,6 +1,7 @@
 import type { DragEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
+import SlotifyLogo from "./SlotifyLogo";
 
 const timelineSteps = [
   { id: "upload", label: "Upload" },
@@ -712,7 +713,9 @@ function App() {
   return (
     <div className={`app page-${activePage}`}>
       <header className="topbar">
-        <a href='/' className="logo ">Slotify</a>
+        <a href='/' className="logo">
+          <SlotifyLogo size="md" variant={activePage === "landing" ? "light" : "light"} />
+        </a>
         <div className="nav-steps">
           {timelineSteps.map((step) => (
             <button
@@ -750,7 +753,9 @@ function App() {
               <span className="hero-dot" />
               AI-Powered Audio Insertion
             </div>
-            <a className="hero-title">Slotify</a>
+            <a className="hero-title">
+              <SlotifyLogo size="lg" variant="light" />
+            </a>
             <p className="hero-subtitle">
               Seamless sponsor insertion for audio.
             </p>
@@ -764,7 +769,7 @@ function App() {
                 className="primary hero-primary"
                 onClick={() => setActivePage("upload")}
               >
-                Try Slotify
+                Try <SlotifyLogo size="sm" variant="dark" />
               </button>
               <button
                 type="button"
@@ -1245,7 +1250,7 @@ function App() {
               />
               <span>
                 I certify that I own the rights to this audio and voice. I
-                understand that Slotify will generate sponsor audio using
+                understand that <SlotifyLogo size="sm" variant="light" /> will generate sponsor audio using
                 voice cloning technology, and I confirm that no unauthorized
                 voice impersonation is involved.
               </span>
