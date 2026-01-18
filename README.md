@@ -62,9 +62,12 @@ Prompt engineering powers the intelligent choice of insertion point and ad read 
 ### What each file in `backend/ad_inserter/` does
 - `__init__.py` exposes the package modules (analysis, llm, mix) and version
 - `analysis.py` handles audio analysis: ffmpeg check, loading/standardizing audio, silence-based candidate detection for podcasts, beat/RMS analysis for songs, optional Whisper transcription, and building candidate payloads
-- `cli.py` provides the CLI workflow: parse args, pick candidates, call LLM to write promo/choose insertion, loudness match + room tone + crossfade, and export output (plus debug artifacts)
+- `analyze_cli.py` exposes a CLI helper that runs analysis and returns JSON for the Node API
+- `cli.py` provides the single-speaker CLI workflow: parse args, pick candidates, call LLM to write promo/choose insertion, loudness match + room tone + crossfade, and export output (plus debug artifacts)
+- `insert_ad.py` handles two-speaker insertion (A/B/DUO), optional diarization, and optional voice cloning
 - `llm.py` builds the prompt and calls OpenAI to generate promo text and choose insertion index; parses JSON response into `LLMResult`
 - `mix.py` does audio mixing utilities: LUFS measurement, loudness matching, looping room tone, ducking, crossfade insertion, and context window extraction
+- `tts.py` builds sponsor reads with ElevenLabs (single or multi-statement blocks)
 
 ### Install
 ```bash
