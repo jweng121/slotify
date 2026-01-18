@@ -1,6 +1,7 @@
 import type { DragEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
+import LandingHero from "./components/LandingHero";
 import SlotifyLogo from "./SlotifyLogo";
 import SoundwaveIcon from "./SoundwaveIcon";
 
@@ -748,66 +749,14 @@ function App() {
         </div>
       </header>
 
+      
       {activePage === "landing" && (
-        <section className="page landing">
-          <div className="landing-hero">
-            <div className="hero-pill">
-              <span className="hero-dot" />
-              AI-Powered Audio Insertion
-            </div>
-            <a className="hero-title">
-              <SlotifyLogo size="lg" variant="light" />
-            </a>
-            <p className="hero-subtitle">
-              Seamless sponsor insertion for audio.
-            </p>
-            <p className="hero-body">
-              Upload an episode, paste an ad read, and Slotify finds the best
-              slot and inserts it naturally — in the creator&apos;s own voice.
-            </p>
-            <div className="hero-actions">
-              <button
-                type="button"
-                className="primary hero-primary"
-                onClick={() => setActivePage("upload")}
-              >
-                Try <SlotifyLogo size="sm" variant="dark" />
-              </button>
-              <button
-                type="button"
-                className="ghost hero-ghost"
-                onClick={() => setActivePage("analyze")}
-              >
-                How it works
-                <span className="chevron">▾</span>
-              </button>
-            </div>
-            <div className="hero-progress">
-              <div className="progress-bar">
-                <span className="progress-fill" />
-                <span className="progress-spot" />
-              </div>
-              <div className="progress-labels">
-                <span>Main Audio</span>
-                <span>Sponsor Insert</span>
-                <span>Main Audio</span>
-              </div>
-            </div>
-            <div className="hero-bars" aria-hidden="true">
-              {Array.from({ length: 9 }).map((_, index) => (
-                <span key={`bar-${index}`} className="hero-bar" />
-              ))}
-            </div>
-            <button
-              type="button"
-              className="hero-scroll"
-              onClick={() => setActivePage("upload")}
-            >
-              ⌄
-            </button>
-          </div>
-        </section>
+        <LandingHero
+          onPrimaryAction={() => setActivePage("upload")}
+          onSecondaryAction={() => setActivePage("analyze")}
+        />
       )}
+
 
       {activePage === "upload" && (
         <section className="page">
