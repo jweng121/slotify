@@ -16,25 +16,25 @@ const SlotifyLogo: React.FC<SlotifyLogoProps> = ({
     sm: {
       fontSize: "0.875rem", // ~14px base
       barHeight: "1.1em", // Main bar height (slightly taller than text)
-      sideBarHeight: "0.75em", // Side bars height (shorter than main)
+      sideBarHeight: "0.5em", // Side bars height (smaller than before)
       barWidth: "0.12em", // Bar width
-      gap: "0.2em", // Gap between center bar and side bars
+      gap: "0.1em", // Gap between center bar and side bars (closer)
       borderRadius: "0.06em",
     },
     md: {
       fontSize: "1.5rem", // ~24px base
       barHeight: "1.1em",
-      sideBarHeight: "0.75em",
+      sideBarHeight: "0.5em",
       barWidth: "0.12em",
-      gap: "0.2em",
+      gap: "0.1em",
       borderRadius: "0.06em",
     },
     lg: {
       fontSize: "3rem", // ~48px base
       barHeight: "1.1em",
-      sideBarHeight: "0.75em",
+      sideBarHeight: "0.5em",
       barWidth: "0.12em",
-      gap: "0.2em",
+      gap: "0.1em",
       borderRadius: "0.06em",
     },
   };
@@ -45,6 +45,12 @@ const SlotifyLogo: React.FC<SlotifyLogoProps> = ({
   // Calculate positions: center bar is where "l" would be, side bars flank it
   const centerBarLeft = `calc(${config.barWidth} + ${config.gap})`;
   const totalWidth = `calc(${config.barWidth} + ${config.gap} + ${config.barWidth} + ${config.gap} + ${config.barWidth})`;
+  
+  // Calculate vertical centering: all bars should be centered along the same line
+  // Main bar center is at barHeight/2 from bottom
+  // Side bars should be centered at the same vertical position
+  const mainBarCenter = `calc(${config.barHeight} / 2)`;
+  const sideBarOffset = `calc(${mainBarCenter} - ${config.sideBarHeight} / 2)`;
 
   return (
     <span
@@ -76,7 +82,7 @@ const SlotifyLogo: React.FC<SlotifyLogoProps> = ({
           verticalAlign: "baseline",
         }}
       >
-        {/* Left side bar */}
+        {/* Left side bar - centered vertically with main bar */}
         <svg
           width={config.barWidth}
           height={config.sideBarHeight}
@@ -85,7 +91,7 @@ const SlotifyLogo: React.FC<SlotifyLogoProps> = ({
           style={{
             position: "absolute",
             left: 0,
-            bottom: 0,
+            bottom: sideBarOffset,
           }}
           aria-hidden="true"
         >
@@ -120,7 +126,7 @@ const SlotifyLogo: React.FC<SlotifyLogoProps> = ({
           />
         </svg>
 
-        {/* Right side bar */}
+        {/* Right side bar - centered vertically with main bar */}
         <svg
           width={config.barWidth}
           height={config.sideBarHeight}
@@ -129,7 +135,7 @@ const SlotifyLogo: React.FC<SlotifyLogoProps> = ({
           style={{
             position: "absolute",
             right: 0,
-            bottom: 0,
+            bottom: sideBarOffset,
           }}
           aria-hidden="true"
         >
