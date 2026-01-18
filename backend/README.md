@@ -1,3 +1,5 @@
+#TODO: combine with main readme
+
 # Ad Inserter Backend
 
 This module inserts a provided promo audio clip into a main audio track (podcast or song). It can optionally use an LLM to generate a 1-sentence promo text and choose the best insertion point based on semantic context.
