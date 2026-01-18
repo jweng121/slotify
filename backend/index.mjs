@@ -396,6 +396,7 @@ const generateStatementFallback = (name, productDesc) => {
 
 const generateBrandStatement = async ({ name, productDesc }) => {
   if (!process.env.OPENAI_API_KEY) {
+    console.log("⚠️  OpenAI API key not set, using fallback for sponsor statement");
     return generateStatementFallback(name, productDesc);
   }
 
@@ -410,6 +411,7 @@ const generateBrandStatement = async ({ name, productDesc }) => {
     .join(" ");
 
   try {
+    console.log("🤖 Calling OpenAI API for sponsor statement generation...");
     const response = await fetch(
       "https://api.openai.com/v1/chat/completions",
       {
@@ -444,15 +446,17 @@ const generateBrandStatement = async ({ name, productDesc }) => {
       },
     );
     if (!response.ok) {
-      throw new Error(`OpenAI statement failed: ${response.status}`);
+      const errorText = await response.text().catch(() => "");
+      throw new Error(`OpenAI statement failed: ${response.status} ${errorText}`);
     }
     const data = await response.json();
     const raw = data?.choices?.[0]?.message?.content ?? "{}";
     const parsed = JSON.parse(raw);
     const statement = String(parsed.statement || "").trim();
+    console.log("✓ OpenAI sponsor statement generated successfully");
     return statement || generateStatementFallback(name, productDesc);
   } catch (error) {
-    console.warn("Statement generation failed, using fallback.", error);
+    console.warn("⚠️  OpenAI statement generation failed, using fallback.", error);
     return generateStatementFallback(name, productDesc);
   }
 };
@@ -605,7 +609,10 @@ const buildMergeFilter = ({ insertAt, previewSeconds, mainDuration }) => {
 };
 
 const enhanceSlotsWithOpenAI = async ({ slots, candidates, mode, durationSeconds }) => {
-  if (!process.env.OPENAI_API_KEY) return null;
+  if (!process.env.OPENAI_API_KEY) {
+    console.log("⚠️  OpenAI API key not set, skipping slot enhancement");
+    return null;
+  }
   const payload = {
     mode,
     duration_seconds: durationSeconds,
@@ -635,6 +642,7 @@ const enhanceSlotsWithOpenAI = async ({ slots, candidates, mode, durationSeconds
     "Rationale: one sentence.",
   ].join(" ");
 
+  console.log("🤖 Calling OpenAI API for slot enhancement...");
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -692,13 +700,18 @@ const enhanceSlotsWithOpenAI = async ({ slots, candidates, mode, durationSeconds
   });
 
   if (!response.ok) {
-    throw new Error(`OpenAI slot details failed: ${response.status}`);
+    const errorText = await response.text().catch(() => "");
+    throw new Error(`OpenAI slot details failed: ${response.status} ${errorText}`);
   }
 
   const data = await response.json();
   const raw = data?.choices?.[0]?.message?.content ?? "{}";
   const parsed = JSON.parse(raw);
-  if (!Array.isArray(parsed.slots)) return null;
+  if (!Array.isArray(parsed.slots)) {
+    console.warn("⚠️  OpenAI slot enhancement returned invalid format");
+    return null;
+  }
+  console.log("✓ OpenAI slot enhancement completed successfully");
   return parsed.slots;
 };
 
@@ -708,7 +721,10 @@ const generateSlotsWithOpenAI = async ({
   durationSeconds,
   count,
 }) => {
-  if (!process.env.OPENAI_API_KEY) return null;
+  if (!process.env.OPENAI_API_KEY) {
+    console.log("⚠️  OpenAI API key not set, skipping OpenAI slot generation");
+    return null;
+  }
   if (!Array.isArray(candidates) || candidates.length === 0) return null;
 
   const desiredCount =
@@ -740,6 +756,7 @@ const generateSlotsWithOpenAI = async ({
     "Rationale: one sentence.",
   ].join(" ");
 
+  console.log("🤖 Calling OpenAI API for slot selection...");
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -804,13 +821,18 @@ const generateSlotsWithOpenAI = async ({
   });
 
   if (!response.ok) {
-    throw new Error(`OpenAI slot selection failed: ${response.status}`);
+    const errorText = await response.text().catch(() => "");
+    throw new Error(`OpenAI slot selection failed: ${response.status} ${errorText}`);
   }
 
   const data = await response.json();
   const raw = data?.choices?.[0]?.message?.content ?? "{}";
   const parsed = JSON.parse(raw);
-  if (!Array.isArray(parsed.slots)) return null;
+  if (!Array.isArray(parsed.slots)) {
+    console.warn("⚠️  OpenAI slot selection returned invalid format");
+    return null;
+  }
+  console.log("✓ OpenAI slot selection completed successfully");
   return parsed.slots;
 };
 
@@ -1409,5 +1431,13 @@ app.listen(port, () => {
     );
   } else {
     console.log("✓ ElevenLabs API key configured");
+  }
+  if (!process.env.OPENAI_API_KEY) {
+    console.warn(
+      "⚠️  OPENAI_API_KEY not set. OpenAI features (sponsor statements, slot enhancement) will use fallback.",
+    );
+  } else {
+    const keyPreview = process.env.OPENAI_API_KEY.substring(0, 7) + "..." + process.env.OPENAI_API_KEY.substring(process.env.OPENAI_API_KEY.length - 4);
+    console.log(`✓ OpenAI API key configured (${keyPreview})`);
   }
 });
