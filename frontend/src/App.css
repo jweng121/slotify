@@ -9,6 +9,8 @@
 .app.page-landing {
   background: #1f1a15;
   color: #f6efe6;
+  position: relative;
+  min-height: 100vh;
 }
 
 .app.page-upload,
@@ -31,6 +33,13 @@
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.18);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
+  position: relative;
+  z-index: 10;
+}
+
+.app.page-landing .topbar {
+  position: relative;
+  z-index: 10;
 }
 
 .logo {

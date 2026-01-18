@@ -4,8 +4,13 @@
   --hero-muted: rgba(248, 241, 232, 0.72);
   --hero-accent: #f0b35a;
   --hero-accent-strong: #e07b49;
-  position: relative;
-  min-height: 80vh;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -17,6 +22,7 @@
     radial-gradient(1100px 520px at 15% 15%, rgba(240, 179, 90, 0.16), transparent 60%),
     radial-gradient(900px 520px at 85% 20%, rgba(224, 123, 73, 0.2), transparent 55%),
     linear-gradient(180deg, #0c0a08 0%, #15100c 100%);
+  z-index: 0;
 }
 
 .landing-hero-content {
