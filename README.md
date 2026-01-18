@@ -1,4 +1,6 @@
-# Seamless Sponsor Insertion - UofTHacks 13
+# Seamless Sponsor Insertion
+
+UofTHacks 13 - Winner of the ElevenLabs Track.
 
 Pipeline: Upload an audio file with speech → AI recommends the best insertion point(s) → ElevenLabs generates a human-like ad read → the system stitches it in smoothly and exports the final audio.
 
