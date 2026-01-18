@@ -591,8 +591,8 @@ function App() {
       const sponsorEntry =
         sponsors.find((entry) => entry.id === sponsorId) ?? sponsors[0];
       const scriptText = sponsorEntry?.script ?? "";
-      if (!scriptText.trim()) {
-        setError(`Add a sponsor statement for ${slot.id}.`);
+      if (!scriptText.trim() && !sponsorEntry?.name?.trim()) {
+        setError(`Add a sponsor name for ${slot.id}.`);
         return;
       }
     }
@@ -612,16 +612,23 @@ function App() {
         const sponsorEntry =
           sponsors.find((entry) => entry.id === sponsorId) ?? sponsors[0];
         const scriptText = sponsorEntry?.script ?? "";
+        const sponsorName = sponsorEntry?.name ?? "";
+
+        const ttsPayload: Record<string, string | object> = {
+          voiceId,
+          modelId: "eleven_multilingual_v2",
+          outputFormat: "mp3_44100_128",
+        };
+        if (scriptText.trim()) {
+          ttsPayload.text = scriptText;
+        } else {
+          ttsPayload.sponsor = { name: sponsorName };
+        }
 
         const response = await fetch(`${apiBase}/api/tts`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            voiceId,
-            text: scriptText,
-            modelId: "eleven_multilingual_v2",
-            outputFormat: "mp3_44100_128",
-          }),
+          body: JSON.stringify(ttsPayload),
         });
 
         if (!response.ok) {

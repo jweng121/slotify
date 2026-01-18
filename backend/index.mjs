@@ -1055,11 +1055,30 @@ app.post("/api/insert-sections", upload.single("audio"), async (req, res) => {
 
 app.post("/api/tts", async (req, res) => {
   const { voiceId, modelId, outputFormat, pauseMs } = req.body ?? {};
-  const statements = normalizeStatements(
+  let statements = normalizeStatements(
     req.body?.statements ?? req.body?.texts ?? req.body?.text,
   );
-  if (!voiceId || statements.length === 0) {
-    res.status(400).json({ error: "voiceId and text are required." });
+  if (!voiceId) {
+    res.status(400).json({ error: "voiceId is required." });
+    return;
+  }
+
+  if (statements.length === 0) {
+    const sponsor = req.body?.sponsor ?? {};
+    const name = String(
+      sponsor?.name ?? req.body?.name ?? req.body?.brand ?? "",
+    ).trim();
+    const productDesc = String(
+      sponsor?.productDesc ?? req.body?.productDesc ?? "",
+    ).trim();
+    const generated = await generateBrandStatement({ name, productDesc });
+    if (generated) {
+      statements = [generated];
+    }
+  }
+
+  if (statements.length === 0) {
+    res.status(400).json({ error: "text is required." });
     return;
   }
 
