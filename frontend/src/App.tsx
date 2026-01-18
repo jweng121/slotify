@@ -262,7 +262,11 @@ function App() {
     if (audioDuration && audioDuration > 0) {
       ctx.lineWidth = 2;
       for (const slot of slots) {
-        const x = (slot.time / audioDuration) * width;
+        if (!audioDuration || audioDuration <= 0) continue;
+        const ratio = slot.time / audioDuration;
+        if (!Number.isFinite(ratio)) continue;
+        const clamped = Math.max(0, Math.min(1, ratio));
+        const x = clamped * (width - 1) + 0.5;
         if (Number.isFinite(x)) {
           ctx.strokeStyle = selectedSlotIds.includes(slot.id)
             ? "rgba(79, 181, 120, 0.85)"
@@ -275,8 +279,16 @@ function App() {
       }
 
       const selectedInsert = Number.parseFloat(insertAt);
-      if (Number.isFinite(selectedInsert) && selectedInsert >= 0) {
-        const x = (selectedInsert / audioDuration) * width;
+      if (
+        audioDuration &&
+        audioDuration > 0 &&
+        Number.isFinite(selectedInsert) &&
+        selectedInsert >= 0
+      ) {
+        const ratio = selectedInsert / audioDuration;
+        if (!Number.isFinite(ratio)) return;
+        const clamped = Math.max(0, Math.min(1, ratio));
+        const x = clamped * (width - 1) + 0.5;
         if (Number.isFinite(x)) {
           ctx.strokeStyle = "rgba(245, 157, 0, 0.95)";
           ctx.beginPath();
@@ -372,11 +384,17 @@ function App() {
       insertSuggestions.length >= 3
         ? insertSuggestions.slice(0, 3)
         : fallbackSlots;
-    const nextSlots = suggestions.map((entry, index) => ({
-      id: `slot-${index + 1}`,
-      time: entry.time,
-      confidence: entry.confidence,
-    }));
+    const nextSlots = suggestions.map((entry, index) => {
+      const clampedTime =
+        audioDuration && audioDuration > 0
+          ? Math.min(Math.max(0, entry.time), audioDuration)
+          : Math.max(0, entry.time);
+      return {
+        id: `slot-${index + 1}`,
+        time: clampedTime,
+        confidence: entry.confidence,
+      };
+    });
     setSlots(nextSlots);
     if (!selectedSlotIds.length && nextSlots.length) {
       setSelectedSlotIds([nextSlots[0].id]);
@@ -958,7 +976,10 @@ function App() {
                       }`}
                       style={{
                         left: audioDuration
-                          ? `${(slot.time / audioDuration) * 100}%`
+                          ? `calc(${Math.min(
+                              100,
+                              Math.max(0, (slot.time / audioDuration) * 100),
+                            )}% - 8px)`
                           : "50%",
                       }}
                       onClick={() => toggleSlotSelection(slot.id)}
