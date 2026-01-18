@@ -11,54 +11,28 @@ const SlotifyLogo: React.FC<SlotifyLogoProps> = ({
   variant = "dark",
   className = "",
 }) => {
-  // Size mappings for font-size and bar dimensions (all in em for scalability)
+  // Size mappings for font-size
   const sizeConfig = {
     sm: {
       fontSize: "0.875rem", // ~14px base
-      barHeight: "1.1em", // Main bar height (slightly taller than text)
-      sideBarHeight: "0.5em", // Side bars height (smaller than before)
-      barWidth: "0.12em", // Bar width
-      gap: "0.1em", // Gap between center bar and side bars (closer)
-      borderRadius: "0.06em",
     },
     md: {
       fontSize: "1.5rem", // ~24px base
-      barHeight: "1.1em",
-      sideBarHeight: "0.5em",
-      barWidth: "0.12em",
-      gap: "0.1em",
-      borderRadius: "0.06em",
     },
     lg: {
       fontSize: "3rem", // ~48px base
-      barHeight: "1.1em",
-      sideBarHeight: "0.5em",
-      barWidth: "0.12em",
-      gap: "0.1em",
-      borderRadius: "0.06em",
     },
   };
 
   const config = sizeConfig[size];
   const textColor = variant === "light" ? "#f6efe6" : "#231f1a";
 
-  // Calculate positions: center bar is where "l" would be, side bars flank it
-  const centerBarLeft = `calc(${config.barWidth} + ${config.gap})`;
-  const totalWidth = `calc(${config.barWidth} + ${config.gap} + ${config.barWidth} + ${config.gap} + ${config.barWidth})`;
-  
-  // Calculate vertical centering: all bars should be centered along the same line
-  // Main bar center is at barHeight/2 from bottom
-  // Side bars should be centered at the same vertical position
-  const mainBarCenter = `calc(${config.barHeight} / 2)`;
-  const sideBarOffset = `calc(${mainBarCenter} - ${config.sideBarHeight} / 2)`;
-
   return (
     <span
       className={`slotify-logo ${className}`}
       aria-label="Slotify"
       style={{
-        display: "inline-flex",
-        alignItems: "baseline",
+        display: "inline-block",
         fontFamily: '"Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
         fontSize: config.fontSize,
         fontWeight: 600,
@@ -67,90 +41,7 @@ const SlotifyLogo: React.FC<SlotifyLogoProps> = ({
         lineHeight: 1,
       }}
     >
-      {/* "S" */}
-      <span style={{ display: "inline-block" }}>S</span>
-      
-      {/* "l" with soundwave bars - positioned to replace the "l" character */}
-      <span
-        style={{
-          position: "relative",
-          display: "inline-block",
-          width: totalWidth,
-          height: config.barHeight,
-          marginLeft: "0.05em",
-          marginRight: "0.05em",
-          verticalAlign: "baseline",
-        }}
-      >
-        {/* Left side bar - centered vertically with main bar */}
-        <svg
-          width={config.barWidth}
-          height={config.sideBarHeight}
-          viewBox="0 0 1 1"
-          preserveAspectRatio="none"
-          style={{
-            position: "absolute",
-            left: 0,
-            bottom: sideBarOffset,
-          }}
-          aria-hidden="true"
-        >
-          <rect
-            width="100%"
-            height="100%"
-            rx={config.borderRadius}
-            ry={config.borderRadius}
-            fill={textColor}
-          />
-        </svg>
-
-        {/* Main "l" bar (centered, replaces the "l" stroke) */}
-        <svg
-          width={config.barWidth}
-          height={config.barHeight}
-          viewBox="0 0 1 1"
-          preserveAspectRatio="none"
-          style={{
-            position: "absolute",
-            left: centerBarLeft,
-            bottom: 0,
-          }}
-          aria-hidden="true"
-        >
-          <rect
-            width="100%"
-            height="100%"
-            rx={config.borderRadius}
-            ry={config.borderRadius}
-            fill={textColor}
-          />
-        </svg>
-
-        {/* Right side bar - centered vertically with main bar */}
-        <svg
-          width={config.barWidth}
-          height={config.sideBarHeight}
-          viewBox="0 0 1 1"
-          preserveAspectRatio="none"
-          style={{
-            position: "absolute",
-            right: 0,
-            bottom: sideBarOffset,
-          }}
-          aria-hidden="true"
-        >
-          <rect
-            width="100%"
-            height="100%"
-            rx={config.borderRadius}
-            ry={config.borderRadius}
-            fill={textColor}
-          />
-        </svg>
-      </span>
-
-      {/* "otify" */}
-      <span style={{ display: "inline-block" }}>otify</span>
+      Slotify
     </span>
   );
 };

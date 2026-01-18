@@ -2,6 +2,7 @@ import type { DragEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
 import SlotifyLogo from "./SlotifyLogo";
+import SoundwaveIcon from "./SoundwaveIcon";
 
 const timelineSteps = [
   { id: "upload", label: "Upload" },
@@ -713,7 +714,8 @@ function App() {
   return (
     <div className={`app page-${activePage}`}>
       <header className="topbar">
-        <a href='/' className="logo">
+        <a href='/' className="logo" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <SoundwaveIcon size="md" variant={activePage === "landing" ? "light" : "light"} />
           <SlotifyLogo size="md" variant={activePage === "landing" ? "light" : "light"} />
         </a>
         <div className="nav-steps">
