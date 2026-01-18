@@ -120,6 +120,7 @@
   flex: 1;
   display: grid;
   align-items: center;
+  justify-items: stretch;
   padding: 2.5rem 3rem 3.5rem;
 }
 
@@ -399,6 +400,7 @@ h1 {
   display: grid;
   gap: 2rem;
   box-shadow: 0 18px 40px rgba(20, 20, 20, 0.08);
+  width: 100%;
 }
 
 .app.page-upload .page-card,
@@ -624,6 +626,7 @@ h1 {
   padding: 1.2rem 1.4rem;
   display: grid;
   gap: 0.8rem;
+  width: 100%;
 }
 
 .timeline-title {
@@ -633,10 +636,12 @@ h1 {
 
 .timeline-waveform {
   position: relative;
+  width: 100%;
 }
 
 .timeline-canvas {
   margin: 0;
+  width: 100%;
 }
 
 .timeline-markers {

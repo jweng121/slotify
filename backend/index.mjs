@@ -202,6 +202,30 @@ const normalizeStatements = (value) => {
 const clamp = (value, min, max) =>
   Math.min(max, Math.max(min, value));
 
+const endsWithSentenceBoundary = (text) =>
+  /[.!?]["')\]]?\s*$/.test(String(text ?? "").trim());
+
+const mergeCandidates = (base, extra, minGapMs = 400) => {
+  const combined = [...base, ...extra].filter(Boolean);
+  combined.sort((a, b) => a.ms - b.ms);
+  const merged = [];
+  for (const cand of combined) {
+    const last = merged[merged.length - 1];
+    if (!last || Math.abs(cand.ms - last.ms) > minGapMs) {
+      merged.push(cand);
+      continue;
+    }
+    const prefer =
+      (cand.silenceMs ?? 0) > (last.silenceMs ?? 0) ||
+      (endsWithSentenceBoundary(cand.snippet) &&
+        !endsWithSentenceBoundary(last.snippet));
+    if (prefer) {
+      merged[merged.length - 1] = cand;
+    }
+  }
+  return merged;
+};
+
 const scoreCandidate = (candidate, durationSeconds, mode) => {
   const timeSeconds = candidate.ms / 1000;
   let score = 0.4;
@@ -212,7 +236,11 @@ const scoreCandidate = (candidate, durationSeconds, mode) => {
     score += 0.1;
   }
   if (candidate.snippet && candidate.snippet !== "TRANSCRIPT_UNAVAILABLE") {
-    score += 0.05;
+    if (endsWithSentenceBoundary(candidate.snippet)) {
+      score += 0.3;
+    } else {
+      score -= 0.2;
+    }
   }
   if (durationSeconds) {
     const ratio = timeSeconds / durationSeconds;
@@ -334,6 +362,8 @@ const runPythonAnalyze = async (audioPath, mode) =>
       audioPath,
       "--mode",
       mode,
+      "--snippet-count",
+      "12",
     ];
     const child = spawn(pythonBin, args, {
       cwd: path.dirname(fileURLToPath(import.meta.url)),
@@ -879,6 +909,55 @@ app.post("/api/insert-sections", upload.single("audio"), async (req, res) => {
     const durationSeconds =
       duration ?? (durationMs ? durationMs / 1000 : null);
 
+    let transcriptCandidates = [];
+    if (process.env.OPENAI_API_KEY) {
+      try {
+        const transcriptForm = new FormData();
+        transcriptForm.append("model", "whisper-1");
+        transcriptForm.append("response_format", "verbose_json");
+        transcriptForm.append(
+          "file",
+          new Blob([audioFile.buffer]),
+          audioFile.originalname || "audio.mp3",
+        );
+
+        const transcriptResponse = await fetch(
+          "https://api.openai.com/v1/audio/transcriptions",
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+            },
+            body: transcriptForm,
+          },
+        );
+
+        if (transcriptResponse.ok) {
+          const transcript = await transcriptResponse.json();
+          const segments = Array.isArray(transcript?.segments)
+            ? transcript.segments
+            : [];
+          transcriptCandidates = segments
+            .map((segment, index) => {
+              const text = String(segment.text ?? "").trim();
+              if (!endsWithSentenceBoundary(text)) return null;
+              const end = Number(segment.end ?? 0);
+              if (!Number.isFinite(end)) return null;
+              const nextStart = Number(segments[index + 1]?.start ?? end);
+              const gapMs = Math.max(0, (nextStart - end) * 1000);
+              return {
+                ms: Math.round(end * 1000),
+                silenceMs: Math.round(gapMs),
+                snippet: text,
+              };
+            })
+            .filter(Boolean);
+        }
+      } catch (error) {
+        console.warn("OpenAI transcript candidates failed.", error);
+      }
+    }
+
     const snippetsRaw = analysisResult?.snippets ?? {};
     const snippets = Object.fromEntries(
       Object.entries(snippetsRaw).map(([key, value]) => [
@@ -906,6 +985,10 @@ app.post("/api/insert-sections", upload.single("audio"), async (req, res) => {
       maxMs !== null
         ? candidates.filter((entry) => entry.ms <= maxMs)
         : candidates;
+    const combinedCandidates = mergeCandidates(
+      boundedCandidates,
+      transcriptCandidates,
+    );
 
     const fallbackCandidates =
       durationSeconds && durationSeconds > 0
@@ -920,8 +1003,8 @@ app.post("/api/insert-sections", upload.single("audio"), async (req, res) => {
             { ms: 36000, silenceMs: 0, snippet: "" },
           ];
 
-    const usableCandidates = boundedCandidates.length
-      ? boundedCandidates
+    const usableCandidates = combinedCandidates.length
+      ? combinedCandidates
       : fallbackCandidates;
     const scoredCandidates = usableCandidates.map((candidate) => ({
       ...candidate,

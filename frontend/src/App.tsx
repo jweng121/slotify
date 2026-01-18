@@ -158,6 +158,7 @@ function App() {
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [audioUrl, setAudioUrl] = useState("");
+  const [baseAudioUrl, setBaseAudioUrl] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [isRendering, setIsRendering] = useState(false);
@@ -196,6 +197,21 @@ function App() {
       URL.revokeObjectURL(audioUrl);
     };
   }, [audioUrl]);
+
+  useEffect(() => {
+    if (!baseAudio) {
+      setBaseAudioUrl("");
+      return;
+    }
+    const nextUrl = URL.createObjectURL(baseAudio);
+    setBaseAudioUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return nextUrl;
+    });
+    return () => {
+      URL.revokeObjectURL(nextUrl);
+    };
+  }, [baseAudio]);
 
   const drawWaveform = () => {
     const canvas = waveformRef.current;
@@ -826,6 +842,12 @@ function App() {
                   setBaseAudio(nextFiles?.[0] ?? null)
                 }
               />
+              {baseAudioUrl && (
+                <div className="inline-preview">
+                  <div className="inline-preview-title">Original audio</div>
+                  <audio controls src={baseAudioUrl} />
+                </div>
+              )}
               <div className="upload-details">
                 <div className="field">
                   <label>Sponsor companies</label>
@@ -1223,7 +1245,7 @@ function App() {
               />
               <span>
                 I certify that I own the rights to this audio and voice. I
-                understand that Sl|lotify will generate sponsor audio using
+                understand that Slotify will generate sponsor audio using
                 voice cloning technology, and I confirm that no unauthorized
                 voice impersonation is involved.
               </span>
