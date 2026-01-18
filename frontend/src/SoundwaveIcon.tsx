@@ -63,6 +63,7 @@ const SoundwaveIcon: React.FC<SoundwaveIconProps> = ({
         alignItems: "center",
         fontSize: config.iconSize,
         lineHeight: 1,
+        transform: "translateY(-0.1em)",
       }}
     >
       <span
