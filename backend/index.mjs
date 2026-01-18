@@ -3,6 +3,7 @@ import cors from "cors";
 import express from "express";
 import multer from "multer";
 import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -161,6 +162,132 @@ const getAudioDuration = async (filePath) =>
     });
   });
 
+const ensureDir = async (dirPath) => {
+  await fs.promises.mkdir(dirPath, { recursive: true });
+};
+
+const streamToFile = (readable, filePath) =>
+  new Promise((resolve, reject) => {
+    const writable = fs.createWriteStream(filePath);
+    writable.on("finish", resolve);
+    writable.on("error", reject);
+    readable.on("error", reject);
+    readable.pipe(writable);
+  });
+
+const runPythonJson = async (args, cwd) =>
+  new Promise((resolve, reject) => {
+    const pythonBin = process.env.PYTHON_BIN ?? "python";
+    const child = spawn(pythonBin, args, { cwd, env: process.env });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString();
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code !== 0) {
+        reject(new Error(stderr || `python exited with code ${code}`));
+        return;
+      }
+      try {
+        resolve(JSON.parse(stdout.trim() || "{}"));
+      } catch (parseError) {
+        reject(
+          new Error(
+            `Failed to parse python output: ${parseError?.message ?? "unknown"}`,
+          ),
+        );
+      }
+    });
+  });
+
+const jobRoot = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "tmp",
+);
+
+const resolveJobDir = (jobId) => path.join(jobRoot, jobId);
+
+const loadJob = async (jobId) => {
+  const jobPath = path.join(resolveJobDir(jobId), "job.json");
+  try {
+    const raw = await fs.promises.readFile(jobPath, "utf-8");
+    return JSON.parse(raw);
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      return null;
+    }
+    throw error;
+  }
+};
+
+const saveJob = async (jobId, payload) => {
+  const dir = resolveJobDir(jobId);
+  await ensureDir(dir);
+  await fs.promises.writeFile(
+    path.join(dir, "job.json"),
+    JSON.stringify(payload, null, 2),
+  );
+};
+
+const estimateSpeechSeconds = (text) => {
+  const words = text.trim().split(/\s+/).filter(Boolean).length;
+  if (!words) return 3;
+  return Math.min(12, Math.max(3, words / 2.8));
+};
+
+const ensureSponsorAudio = async ({ jobDir, sponsorText, voiceId }) => {
+  const hash = crypto
+    .createHash("sha256")
+    .update(`${voiceId ?? "default"}::${sponsorText}`)
+    .digest("hex")
+    .slice(0, 12);
+  const sponsorPath = path.join(jobDir, `sponsor-${hash}.mp3`);
+  try {
+    await fs.promises.access(sponsorPath);
+    return sponsorPath;
+  } catch {
+    // continue
+  }
+
+  if (process.env.ELEVENLABS_API_KEY && voiceId) {
+    try {
+      const audio = await elevenlabs.textToSpeech.convert(voiceId, {
+        text: sponsorText,
+        modelId: "eleven_multilingual_v2",
+        outputFormat: "mp3_44100_128",
+      });
+      const stream = Readable.fromWeb(audio);
+      await streamToFile(stream, sponsorPath);
+      return sponsorPath;
+    } catch (error) {
+      console.warn("ElevenLabs TTS failed, using silence fallback.", error);
+    }
+  }
+
+  const duration = estimateSpeechSeconds(sponsorText);
+  const args = [
+    "-y",
+    "-f",
+    "lavfi",
+    "-i",
+    "anullsrc=r=44100:cl=stereo",
+    "-t",
+    duration.toFixed(2),
+    "-c:a",
+    "libmp3lame",
+    "-q:a",
+    "5",
+    sponsorPath,
+  ];
+  await runFfmpeg(args);
+  return sponsorPath;
+};
+
 app.post(
   "/api/merge",
   upload.fields([
@@ -310,16 +437,10 @@ app.post(
 app.post("/api/insert-sections", upload.single("audio"), async (req, res) => {
   const audioFile = req.file;
   const count = Number.parseInt(req.body?.count ?? "5", 10);
+  const mode = req.body?.mode?.toString()?.trim() || "podcast";
 
   if (!audioFile) {
     res.status(400).json({ error: "audio file is required." });
-    return;
-  }
-
-  if (!process.env.OPENAI_API_KEY) {
-    res.status(500).json({
-      error: "OPENAI_API_KEY not configured. Please set it in your environment.",
-    });
     return;
   }
 
@@ -337,138 +458,34 @@ app.post("/api/insert-sections", upload.single("audio"), async (req, res) => {
 
   try {
     await fs.promises.writeFile(audioPath, audioFile.buffer);
-    const duration = await getAudioDuration(audioPath).catch(() => null);
 
-    const transcriptForm = new FormData();
-    transcriptForm.append("model", "whisper-1");
-    transcriptForm.append("response_format", "verbose_json");
-    transcriptForm.append(
-      "file",
-      new Blob([audioFile.buffer]),
-      audioFile.originalname || "audio.mp3",
+    const result = await runPythonJson(
+      [
+        "-m",
+        "ad_inserter.recommend",
+        "--audio",
+        audioPath,
+        "--mode",
+        mode === "song" ? "song" : "podcast",
+        "--top",
+        Number.isFinite(count) ? String(count) : "5",
+      ],
+      path.dirname(fileURLToPath(import.meta.url)),
     );
 
-    const transcriptResponse = await fetch(
-      "https://api.openai.com/v1/audio/transcriptions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-        },
-        body: transcriptForm,
-      },
-    );
-
-    if (!transcriptResponse.ok) {
-      const detail = await transcriptResponse.text();
-      throw new Error(
-        `Transcription failed: ${transcriptResponse.status} ${detail}`,
-      );
-    }
-
-    const transcript = await transcriptResponse.json();
-    const segments = Array.isArray(transcript?.segments)
-      ? transcript.segments
+    const recommendations = Array.isArray(result?.recommendations)
+      ? result.recommendations
       : [];
-
-    const candidates = [];
-    let prevEnd = 0;
-    for (const segment of segments) {
-      const start = Number(segment.start ?? 0);
-      const end = Number(segment.end ?? 0);
-      if (Number.isFinite(start) && start - prevEnd >= 0.4) {
-        candidates.push((start + prevEnd) / 2);
-      }
-      if (Number.isFinite(end)) {
-        prevEnd = Math.max(prevEnd, end);
-      }
-    }
-    if (duration !== null && duration - prevEnd >= 0.4) {
-      candidates.push((duration + prevEnd) / 2);
-    }
-
-    const prompt = [
-      "Pick natural ad insertion points for the audio.",
-      "Return JSON with a points array of seconds (numbers).",
-      `Max points: ${Number.isFinite(count) ? count : 5}.`,
-      duration !== null
-        ? `Audio duration: ${duration.toFixed(2)} seconds.`
-        : "Audio duration unknown.",
-      candidates.length > 0
-        ? `Candidate silent midpoints (seconds): ${candidates
-            .map((value) => value.toFixed(2))
-            .join(", ")}.`
-        : "No candidate silences detected; pick evenly spaced points.",
-      `Transcript segments: ${segments
-        .map((segment) => {
-          const start = Number(segment.start ?? 0);
-          const end = Number(segment.end ?? 0);
-          const text = String(segment.text ?? "").trim();
-          return `${start.toFixed(2)}-${end.toFixed(2)}: ${text}`;
-        })
-        .join(" | ")}`,
-    ].join(" ");
-
-    let points = [];
-    const completionResponse = await fetch(
-      "https://api.openai.com/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "gpt-4o-mini",
-          temperature: 0.2,
-          messages: [
-            {
-              role: "system",
-              content:
-                "Choose insertion points based on when the person talking in the audio clip completley finishes a sentence. Look for pauses between sentences. Choose points where the waveform is lowest. Never choose in between sentences.",
-            },
-            { role: "user", content: prompt },
-          ],
-          response_format: { type: "json_object" },
-        }),
-      },
-    );
-
-    if (!completionResponse.ok) {
-      const detail = await completionResponse.text();
-      throw new Error(
-        `OpenAI selection failed: ${completionResponse.status} ${detail}`,
-      );
-    }
-
-    const completion = await completionResponse.json();
-    const rawContent =
-      completion?.choices?.[0]?.message?.content?.trim() ?? "{}";
-    try {
-      const parsed = JSON.parse(rawContent);
-      if (Array.isArray(parsed.points)) {
-        points = parsed.points;
-      }
-    } catch (parseError) {
-      points = [];
-    }
-
-    if (points.length === 0 && candidates.length > 0) {
-      points = candidates;
-    }
-
-    const maxPoints = Number.isFinite(count) ? count : 5;
-    const normalized = points
-      .filter((value) => Number.isFinite(value))
-      .map((value) => Number(value))
-      .filter((value) => (duration ? value >= 0 && value <= duration : value >= 0))
-      .sort((a, b) => a - b)
-      .slice(0, Math.max(1, maxPoints));
+    const points = recommendations
+      .map((rec) => rec?.insertion_time_seconds)
+      .filter((value) => Number.isFinite(value));
 
     res.json({
-      points: normalized,
-      duration,
-      source: normalized.length === points.length ? "openai" : "fallback",
+      points,
+      duration: Number.isFinite(result?.duration_ms)
+        ? result.duration_ms / 1000.0
+        : null,
+      source: "heuristic",
     });
   } catch (error) {
     res.status(500).json({
@@ -477,6 +494,294 @@ app.post("/api/insert-sections", upload.single("audio"), async (req, res) => {
     });
   } finally {
     await cleanup();
+  }
+});
+
+app.post("/api/analyze", upload.single("audio"), async (req, res) => {
+  const audioFile = req.file;
+  const sponsorText = req.body?.sponsorText?.toString()?.trim() ?? "";
+  const mode = req.body?.mode?.toString()?.trim() || "podcast";
+  const debug = req.query?.debug === "1" || req.body?.debug === "1";
+
+  if (!audioFile) {
+    res.status(400).json({ error: "audio file is required." });
+    return;
+  }
+
+  if (!sponsorText) {
+    res.status(400).json({ error: "sponsorText is required." });
+    return;
+  }
+
+  const jobId = crypto.randomUUID();
+  const jobDir = resolveJobDir(jobId);
+  await ensureDir(jobDir);
+
+  const ext = path.extname(audioFile.originalname || ".mp3") || ".mp3";
+  const mainPath = path.join(jobDir, `main${ext}`);
+
+  try {
+    await fs.promises.writeFile(mainPath, audioFile.buffer);
+    const result = await runPythonJson(
+      [
+        "-m",
+        "ad_inserter.recommend",
+        "--audio",
+        mainPath,
+        "--mode",
+        mode === "song" ? "song" : "podcast",
+        "--top",
+        "3",
+        ...(debug ? ["--debug"] : []),
+      ],
+      path.dirname(fileURLToPath(import.meta.url)),
+    );
+
+    const recommendations = Array.isArray(result?.recommendations)
+      ? result.recommendations
+      : [];
+    const mapped = recommendations.map((rec, index) => ({
+      slotId: rec.slotId ?? `slot-${index}`,
+      insertion_ms: rec.insertion_ms,
+      insertion_time_seconds: rec.insertion_time_seconds,
+      seamlessness_percent: rec.seamlessness_percent,
+      pros: Array.isArray(rec.pros) ? rec.pros : [],
+      cons: Array.isArray(rec.cons) ? rec.cons : [],
+      rationale: rec.rationale ?? "",
+      preview_request_payload: { jobId, slotId: rec.slotId ?? `slot-${index}` },
+    }));
+
+    console.log("Analyze candidates:", {
+      jobId,
+      candidates: result?.candidates_count ?? 0,
+      topSlots: mapped.map((slot) => ({
+        slotId: slot.slotId,
+        insertion_ms: slot.insertion_ms,
+        seamlessness_percent: slot.seamlessness_percent,
+      })),
+    });
+
+    await saveJob(jobId, {
+      jobId,
+      createdAt: new Date().toISOString(),
+      mainPath,
+      sponsorText,
+      mode: mode === "song" ? "song" : "podcast",
+      duration_ms: result?.duration_ms ?? null,
+      recommendations: mapped,
+    });
+
+    res.json({
+      jobId,
+      duration_ms: result?.duration_ms ?? null,
+      recommendations: mapped,
+      ...(debug && result?.debug ? { debug: result.debug } : {}),
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Analyze failed.",
+    });
+  }
+});
+
+app.post("/api/preview", async (req, res) => {
+  const { jobId, slotId, sponsorText, voiceId } = req.body ?? {};
+  if (!jobId || !slotId) {
+    res.status(400).json({ error: "jobId and slotId are required." });
+    return;
+  }
+
+  try {
+    const job = await loadJob(jobId);
+    if (!job) {
+      res.status(404).json({ error: "Job not found." });
+      return;
+    }
+    const slot = (job.recommendations ?? []).find(
+      (entry) => entry.slotId === slotId,
+    );
+    if (!slot) {
+      res.status(404).json({ error: "Slot not found for job." });
+      return;
+    }
+
+    const mainPath = job.mainPath;
+    const resolvedText = (sponsorText ?? job.sponsorText ?? "").trim();
+    if (!resolvedText) {
+      res.status(400).json({ error: "sponsorText is required." });
+      return;
+    }
+
+    const resolvedVoiceId =
+      voiceId || process.env.ELEVENLABS_VOICE_ID || "";
+    const jobDir = resolveJobDir(jobId);
+    const insertPath = await ensureSponsorAudio({
+      jobDir,
+      sponsorText: resolvedText,
+      voiceId: resolvedVoiceId,
+    });
+
+    const durationSec =
+      Number.isFinite(job?.duration_ms) && job.duration_ms > 0
+        ? job.duration_ms / 1000.0
+        : await getAudioDuration(mainPath);
+    const insertAtSec = slot.insertion_ms / 1000.0;
+    const preStart = Math.max(0, insertAtSec - 3);
+    const postEnd =
+      durationSec && Number.isFinite(durationSec)
+        ? Math.min(durationSec, insertAtSec + 3)
+        : insertAtSec + 3;
+
+    const previewPath = path.join(jobDir, `preview-${slotId}.mp3`);
+    const filter = [
+      `[0:a]aformat=sample_rates=44100:channel_layouts=stereo,` +
+        `atrim=${preStart}:${insertAtSec},asetpts=PTS-STARTPTS[pre]`,
+      `[0:a]aformat=sample_rates=44100:channel_layouts=stereo,` +
+        `atrim=${insertAtSec}:${postEnd},asetpts=PTS-STARTPTS[post]`,
+      `[1:a]aformat=sample_rates=44100:channel_layouts=stereo,` +
+        `asetpts=PTS-STARTPTS[ad]`,
+      `[pre][ad][post]concat=n=3:v=0:a=1[out]`,
+    ].join(";");
+
+    const args = [
+      "-y",
+      "-i",
+      mainPath,
+      "-i",
+      insertPath,
+      "-filter_complex",
+      filter,
+      "-map",
+      "[out]",
+      "-c:a",
+      "libmp3lame",
+      "-q:a",
+      "2",
+      previewPath,
+    ];
+
+    await runFfmpeg(args);
+
+    const insertDuration = await getAudioDuration(insertPath).catch(() => null);
+    const preWindow = insertAtSec - preStart;
+    const postWindow = postEnd - insertAtSec;
+    console.log("Preview window:", {
+      jobId,
+      slotId,
+      preStart: preStart.toFixed(2),
+      insertAtSec: insertAtSec.toFixed(2),
+      postEnd: postEnd.toFixed(2),
+      expectedDuration:
+        insertDuration !== null
+          ? (preWindow + insertDuration + postWindow).toFixed(2)
+          : "unknown",
+    });
+
+    res.setHeader("Content-Type", "audio/mpeg");
+    const stream = fs.createReadStream(previewPath);
+    stream.on("error", (streamError) => {
+      if (!res.headersSent) {
+        res.status(500).json({
+          error:
+            streamError instanceof Error
+              ? streamError.message
+              : "Failed to stream preview.",
+        });
+      }
+    });
+    stream.pipe(res);
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Preview failed.",
+    });
+  }
+});
+
+app.post("/api/render", async (req, res) => {
+  const { jobId, slotId, sponsorText, voiceId } = req.body ?? {};
+  if (!jobId || !slotId) {
+    res.status(400).json({ error: "jobId and slotId are required." });
+    return;
+  }
+
+  try {
+    const job = await loadJob(jobId);
+    if (!job) {
+      res.status(404).json({ error: "Job not found." });
+      return;
+    }
+    const slot = (job.recommendations ?? []).find(
+      (entry) => entry.slotId === slotId,
+    );
+    if (!slot) {
+      res.status(404).json({ error: "Slot not found for job." });
+      return;
+    }
+
+    const mainPath = job.mainPath;
+    const resolvedText = (sponsorText ?? job.sponsorText ?? "").trim();
+    if (!resolvedText) {
+      res.status(400).json({ error: "sponsorText is required." });
+      return;
+    }
+
+    const resolvedVoiceId =
+      voiceId || process.env.ELEVENLABS_VOICE_ID || "";
+    const jobDir = resolveJobDir(jobId);
+    const insertPath = await ensureSponsorAudio({
+      jobDir,
+      sponsorText: resolvedText,
+      voiceId: resolvedVoiceId,
+    });
+
+    const insertAtSec = slot.insertion_ms / 1000.0;
+    const outPath = path.join(jobDir, `render-${slotId}.mp3`);
+    const filter = [
+      `[0:a]aformat=sample_rates=44100:channel_layouts=stereo,` +
+        `atrim=0:${insertAtSec},asetpts=PTS-STARTPTS[a0]`,
+      `[0:a]aformat=sample_rates=44100:channel_layouts=stereo,` +
+        `atrim=${insertAtSec},asetpts=PTS-STARTPTS[a1]`,
+      `[1:a]aformat=sample_rates=44100:channel_layouts=stereo,` +
+        `asetpts=PTS-STARTPTS[ad]`,
+      `[a0][ad][a1]concat=n=3:v=0:a=1[out]`,
+    ].join(";");
+
+    const args = [
+      "-y",
+      "-i",
+      mainPath,
+      "-i",
+      insertPath,
+      "-filter_complex",
+      filter,
+      "-map",
+      "[out]",
+      "-c:a",
+      "libmp3lame",
+      "-q:a",
+      "2",
+      outPath,
+    ];
+
+    await runFfmpeg(args);
+
+    res.setHeader("Content-Type", "audio/mpeg");
+    const stream = fs.createReadStream(outPath);
+    stream.on("error", (streamError) => {
+      if (!res.headersSent) {
+        res.status(500).json({
+          error:
+            streamError instanceof Error
+              ? streamError.message
+              : "Failed to stream render.",
+        });
+      }
+    });
+    stream.pipe(res);
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Render failed.",
+    });
   }
 });
 
