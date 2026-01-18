@@ -170,6 +170,10 @@ function App() {
   const [rightsCertified, setRightsCertified] = useState(false);
   const [selectedTone, setSelectedTone] = useState("professional");
   const [selectedLanguage, setSelectedLanguage] = useState("en");
+  const [showAddSlot, setShowAddSlot] = useState(false);
+  const [newSlotTime, setNewSlotTime] = useState("");
+  const [newSlotMinutes, setNewSlotMinutes] = useState("0");
+  const [newSlotSeconds, setNewSlotSeconds] = useState("0");
 
   const baseAudioName = useMemo(
     () => baseAudio?.name ?? "No file selected.",
@@ -975,6 +979,93 @@ function App() {
             {analysisError && (
               <span className="helper helper-error">{analysisError}</span>
             )}
+
+            {/* Add Slot Section */}
+            <div className="add-slot-section">
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setShowAddSlot(!showAddSlot)}
+              >
+                {showAddSlot ? "Cancel" : "+ Add Custom Slot"}
+              </button>
+              {showAddSlot && (
+                <div className="add-slot-form">
+                  <div className="add-slot-inputs">
+                    <div className="field">
+                      <label htmlFor="slot-minutes">Minutes</label>
+                      <input
+                        id="slot-minutes"
+                        type="number"
+                        min="0"
+                        value={newSlotMinutes}
+                        onChange={(e) => setNewSlotMinutes(e.target.value)}
+                        placeholder="0"
+                      />
+                    </div>
+                    <div className="field">
+                      <label htmlFor="slot-seconds">Seconds</label>
+                      <input
+                        id="slot-seconds"
+                        type="number"
+                        min="0"
+                        max="59"
+                        value={newSlotSeconds}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === "" || (parseInt(val) >= 0 && parseInt(val) <= 59)) {
+                            setNewSlotSeconds(val);
+                          }
+                        }}
+                        placeholder="0"
+                      />
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="primary"
+                    onClick={() => {
+                      const minutes = parseInt(newSlotMinutes) || 0;
+                      const seconds = parseInt(newSlotSeconds) || 0;
+                      const totalSeconds = minutes * 60 + seconds;
+                      
+                      if (totalSeconds < 0) {
+                        return;
+                      }
+                      
+                      if (audioDuration && totalSeconds > audioDuration) {
+                        alert(`Time cannot exceed audio duration (${formatTime(audioDuration)})`);
+                        return;
+                      }
+
+                      // Generate unique slot ID
+                      const existingIds = slots.map(s => s.id);
+                      let slotNumber = slots.length + 1;
+                      let newSlotId = `slot-${slotNumber}`;
+                      while (existingIds.includes(newSlotId)) {
+                        slotNumber++;
+                        newSlotId = `slot-${slotNumber}`;
+                      }
+
+                      const newSlot: Slot = {
+                        id: newSlotId,
+                        time: totalSeconds,
+                        confidence: 75, // Default confidence for manually added slots
+                      };
+
+                      setSlots((prev) => [...prev, newSlot].sort((a, b) => a.time - b.time));
+                      setNewSlotMinutes("0");
+                      setNewSlotSeconds("0");
+                      setShowAddSlot(false);
+                    }}
+                    disabled={!newSlotMinutes && !newSlotSeconds}
+                  >
+                    Add Slot
+                  </button>
+                </div>
+              )}
+            </div>
+
             <div className="slot-grid">
               {slots.map((slot, index) => {
                 const notes = slotNotes[index] ?? [];
