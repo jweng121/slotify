@@ -120,7 +120,7 @@ def _merge_with_api(
 def run() -> None:
     parser = argparse.ArgumentParser(description="Insert a promo into audio.")
     parser.add_argument("--main", required=True, type=Path)
-    parser.add_argument("--voice-id", required=True)
+    parser.add_argument("--voice-id", default=None)
     parser.add_argument("--voice-ids", default=None)
     parser.add_argument("--product-name", required=True)
     parser.add_argument("--product-desc", required=True)
@@ -140,6 +140,8 @@ def run() -> None:
     parser.add_argument("--duck-db", type=float, default=0.0)
 
     args = parser.parse_args()
+    if not args.voice_id and not args.voice_ids:
+        parser.error("--voice-id or --voice-ids is required")
 
     analysis.check_ffmpeg()
 
