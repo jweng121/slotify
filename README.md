@@ -1,6 +1,6 @@
-# Seamless Sponsor Insertion (Audio Monetization Dashboard)
+# Seamless Sponsor Insertion - UofTHacks 13
 
-Pipeline: Upload a podcast + sponsor script → AI recommends the best insertion point(s) → ElevenLabs generates a human-like ad read → the system stitches it in smoothly and exports the final audio.
+Pipeline: Upload an audio file with speech → AI recommends the best insertion point(s) → ElevenLabs generates a human-like ad read → the system stitches it in smoothly and exports the final audio.
 
 ## Core features
 - User input for podcast audio and product name - product details are optional
