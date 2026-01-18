@@ -4,9 +4,9 @@ A B2B dashboard + API that helps platforms (Spotify / YouTube / podcast networks
 Upload a podcast + sponsor script → AI recommends the best insertion point(s) → ElevenLabs generates a human-like ad read → the system stitches it in smoothly and exports the final audio.
 
 ## Core features
-- Upload podcast audio and sponsor scripts
-- AI-recommended insertion timestamps using semantic + silence analysis
-- ElevenLabs TTS for realistic sponsor reads (single or multi-speaker)
+- Upload podcast audio and product name and details (optional) 
+- AI-recommended insertion timestamps using semantic + syntactic analysis
+- ElevenLabs TTS for realistic sponsor reads (single speaker or multi-way conversation)
 - Preview insertions before rendering final output
 - Export monetized episodes with loudness matching + crossfades
 
@@ -55,9 +55,9 @@ The UI runs on `http://localhost:5173` and calls the backend.
 ---
 
 ## Ad Inserter backend module
-This module inserts a provided promo audio clip into a main audio track (podcast or song). It can optionally use an LLM to generate a 1-sentence promo text and choose the best insertion point based on semantic context.
+This module generates and inserts a product promotion into a main audio track (podcast or rhythmic song). An LLM to generate the 1-sentence promo text and choose the best insertion point based on semantic + syntactic context.
 
-Prompt engineering powers the intelligent choice of insertion point and ad read tone.
+Prompt engineered the AI's choice of insertion point and ad read tone.
 
 ### What each file in `backend/ad_inserter/` does
 - `__init__.py` exposes the package modules (analysis, llm, mix) and version
@@ -154,12 +154,12 @@ curl -X POST http://localhost:3001/ad/insert \
 ```
 
 ## How it works
-Semantic context (podcasts):
+Semantic context:
 - Uses Whisper locally (if installed) to transcribe short context windows around candidate insertion points
 - The LLM selects the best insertion point based on topic transitions and sentence boundaries, and writes a 1-sentence promo matching the tone
 - If Whisper is not available, it falls back to silence-based insertion
 
-Rhythmic context (songs):
+Rhythmic/syntactic context:
 - Uses librosa to estimate tempo and beat times
 - Finds low-energy (RMS) valleys, snaps to the nearest beat, and inserts the promo there
 
