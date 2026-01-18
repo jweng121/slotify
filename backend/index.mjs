@@ -675,6 +675,118 @@ const enhanceSlotsWithOpenAI = async ({ slots, candidates, mode, durationSeconds
   return parsed.slots;
 };
 
+const generateSlotsWithOpenAI = async ({
+  candidates,
+  mode,
+  durationSeconds,
+  count,
+}) => {
+  if (!process.env.OPENAI_API_KEY) return null;
+  if (!Array.isArray(candidates) || candidates.length === 0) return null;
+
+  const desiredCount =
+    Number.isFinite(count) && count > 0 ? Math.round(count) : 3;
+  const payload = {
+    mode,
+    duration_seconds: durationSeconds,
+    slots_needed: desiredCount,
+    candidates: candidates.map((cand) => ({
+      insertion_ms: cand.ms,
+      silence_ms: cand.silenceMs ?? 0,
+      snippet: cand.snippet ?? "",
+    })),
+    rules: {
+      pros_count: 3,
+      cons_count: 2,
+      max_words_per_bullet: 7,
+      confidence_range: [70, 95],
+    },
+  };
+
+  const prompt = [
+    "Select the best insertion slots from the candidates.",
+    "Return exactly slots_needed slots.",
+    "Use only candidate insertion_ms values.",
+    "Provide confidence_percent (70-95) for each slot.",
+    "Pros: exactly 3 bullets, short and specific.",
+    "Cons: exactly 2 bullets, short and specific.",
+    "Rationale: one sentence.",
+  ].join(" ");
+
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "gpt-4o-mini",
+      temperature: 0,
+      messages: [
+        { role: "system", content: "You are a precise audio editor." },
+        { role: "user", content: `${prompt}\n\n${JSON.stringify(payload)}` },
+      ],
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "slot_selection",
+          strict: true,
+          schema: {
+            type: "object",
+            properties: {
+              slots: {
+                type: "array",
+                minItems: desiredCount,
+                maxItems: desiredCount,
+                items: {
+                  type: "object",
+                  properties: {
+                    insertion_ms: { type: "integer" },
+                    confidence_percent: { type: "integer" },
+                    pros: {
+                      type: "array",
+                      minItems: 3,
+                      maxItems: 3,
+                      items: { type: "string" },
+                    },
+                    cons: {
+                      type: "array",
+                      minItems: 2,
+                      maxItems: 2,
+                      items: { type: "string" },
+                    },
+                    rationale: { type: "string" },
+                  },
+                  required: [
+                    "insertion_ms",
+                    "confidence_percent",
+                    "pros",
+                    "cons",
+                    "rationale",
+                  ],
+                  additionalProperties: false,
+                },
+              },
+            },
+            required: ["slots"],
+            additionalProperties: false,
+          },
+        },
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`OpenAI slot selection failed: ${response.status}`);
+  }
+
+  const data = await response.json();
+  const raw = data?.choices?.[0]?.message?.content ?? "{}";
+  const parsed = JSON.parse(raw);
+  if (!Array.isArray(parsed.slots)) return null;
+  return parsed.slots;
+};
+
 app.post(
   "/api/merge",
   upload.fields([
@@ -933,66 +1045,75 @@ app.post("/api/insert-sections", upload.single("audio"), async (req, res) => {
       mode,
     });
 
-    const selected = selectTopSlots(
-      scoredCandidates,
-      durationSeconds,
-      6,
-      Number.isFinite(count) ? Math.max(3, count) : 3,
-    ).slice(0, 3);
+    const slotCount = Number.isFinite(count) ? Math.max(3, count) : 3;
+    let slots = [];
+    let usedOpenAiSlots = false;
 
-    let slots = selected.map((candidate) => {
-      const timeSeconds = candidate.ms / 1000;
-      const confidence = Math.round(clamp(70 + candidate.score * 25, 70, 95));
-      const fallbackText = buildFallbackProsCons({
-        mode,
-        silenceMs: candidate.silenceMs,
-        timeSeconds,
-        durationSeconds,
-      });
-      return {
-        insertion_ms: candidate.ms,
-        insertion_time_seconds: Number(timeSeconds.toFixed(3)),
-        confidence_percent: confidence,
-        pros: fallbackText.pros,
-        cons: fallbackText.cons,
-        rationale: fallbackText.rationale,
-        silence_ms: candidate.silenceMs,
-        snippet: candidate.snippet ?? "",
-      };
-    });
-
-    try {
-      const openAiDetails = await enhanceSlotsWithOpenAI({
-        slots,
-        candidates: scoredCandidates,
-        mode,
-        durationSeconds,
-      });
-      if (openAiDetails) {
-        slots = slots.map((slot) => {
-          const match = openAiDetails.find(
-            (entry) => Number(entry.insertion_ms) === slot.insertion_ms,
-          );
-          if (!match) return slot;
-          return {
-            ...slot,
-            pros:
-              Array.isArray(match.pros) && match.pros.length === 3
-                ? match.pros
-                : slot.pros,
-            cons:
-              Array.isArray(match.cons) && match.cons.length === 2
-                ? match.cons
-                : slot.cons,
-            rationale:
-              typeof match.rationale === "string" && match.rationale.trim()
-                ? match.rationale.trim()
-                : slot.rationale,
-          };
+    if (process.env.OPENAI_API_KEY) {
+      try {
+        const openAiSlots = await generateSlotsWithOpenAI({
+          candidates: scoredCandidates,
+          mode,
+          durationSeconds,
+          count: slotCount,
         });
+        if (openAiSlots) {
+          usedOpenAiSlots = true;
+          slots = openAiSlots.map((slot) => {
+            const insertionMs = Number(slot.insertion_ms ?? 0);
+            const matched = scoredCandidates.find(
+              (candidate) => candidate.ms === insertionMs,
+            );
+            const timeSeconds = insertionMs / 1000;
+            return {
+              insertion_ms: insertionMs,
+              insertion_time_seconds: Number(timeSeconds.toFixed(3)),
+              confidence_percent: clamp(
+                Number(slot.confidence_percent ?? 80),
+                70,
+                95,
+              ),
+              pros: Array.isArray(slot.pros) ? slot.pros : [],
+              cons: Array.isArray(slot.cons) ? slot.cons : [],
+              rationale: String(slot.rationale ?? "").trim(),
+              silence_ms: matched?.silenceMs ?? 0,
+              snippet: matched?.snippet ?? "",
+            };
+          });
+        }
+      } catch (error) {
+        console.warn("OpenAI slot selection failed, using fallback.", error);
       }
-    } catch (error) {
-      console.warn("OpenAI slot details failed, using fallback.", error);
+    }
+
+    if (!slots.length) {
+      const selected = selectTopSlots(
+        scoredCandidates,
+        durationSeconds,
+        6,
+        slotCount,
+      ).slice(0, 3);
+
+      slots = selected.map((candidate) => {
+        const timeSeconds = candidate.ms / 1000;
+        const confidence = Math.round(clamp(70 + candidate.score * 25, 70, 95));
+        const fallbackText = buildFallbackProsCons({
+          mode,
+          silenceMs: candidate.silenceMs,
+          timeSeconds,
+          durationSeconds,
+        });
+        return {
+          insertion_ms: candidate.ms,
+          insertion_time_seconds: Number(timeSeconds.toFixed(3)),
+          confidence_percent: confidence,
+          pros: fallbackText.pros,
+          cons: fallbackText.cons,
+          rationale: fallbackText.rationale,
+          silence_ms: candidate.silenceMs,
+          snippet: candidate.snippet ?? "",
+        };
+      });
     }
 
     slots.sort((a, b) => b.confidence_percent - a.confidence_percent);
@@ -1039,7 +1160,11 @@ app.post("/api/insert-sections", upload.single("audio"), async (req, res) => {
       points,
       confidences,
       duration: durationSeconds,
-      source: analysisResult ? "heuristic" : "fallback",
+      source: usedOpenAiSlots
+        ? "openai"
+        : analysisResult
+          ? "heuristic"
+          : "fallback",
       slots,
       sponsorStatements,
     });
