@@ -121,6 +121,7 @@ def run() -> None:
     parser = argparse.ArgumentParser(description="Insert a promo into audio.")
     parser.add_argument("--main", required=True, type=Path)
     parser.add_argument("--voice-id", required=True)
+    parser.add_argument("--voice-ids", default=None)
     parser.add_argument("--product-name", required=True)
     parser.add_argument("--product-desc", required=True)
     parser.add_argument("--product-url", default=None)
@@ -178,6 +179,12 @@ def run() -> None:
     )
     if len(main_audio) > 0:
         chosen_ms = min(chosen_ms, len(main_audio) - 1)
+    voice_ids = []
+    if args.voice_ids:
+        voice_ids = [value.strip() for value in args.voice_ids.split(",") if value.strip()]
+    if not voice_ids:
+        voice_ids = [args.voice_id]
+
     llm_result = llm.generate_promo_and_choice(
         provider=args.llm_provider,
         model=args.llm_model or _default_model(args.llm_provider),
@@ -188,17 +195,46 @@ def run() -> None:
         candidates=analysis.build_candidate_payload(candidates_for_prompt, snippets),
     )
 
-    promo_audio = analysis.standardize_audio(
-        tts.synthesize_audio(
-            tts.TTSRequest(
-                voice_id=args.voice_id,
-                text=llm_result.promo_text,
-                url=args.tts_url,
-                model_id=args.tts_model_id,
-                output_format=args.tts_output_format,
+    if len(voice_ids) > 1:
+        script = llm.generate_ad_script(
+            provider=args.llm_provider,
+            model=args.llm_model or _default_model(args.llm_provider),
+            product_name=args.product_name,
+            product_blurb=args.product_desc,
+            ad_style="CONVERSATIONAL",
+            ad_mode="DUO",
+        )
+        segments_audio = AudioSegment.silent(duration=0)
+        pause = AudioSegment.silent(duration=150)
+        for idx, segment in enumerate(script.segments):
+            voice_id = voice_ids[0] if segment.speaker == "A" else voice_ids[1]
+            line_audio = analysis.standardize_audio(
+                tts.synthesize_audio(
+                    tts.TTSRequest(
+                        voice_id=voice_id,
+                        text=segment.text,
+                        url=args.tts_url,
+                        model_id=args.tts_model_id,
+                        output_format=args.tts_output_format,
+                    )
+                )
+            )
+            segments_audio += line_audio
+            if idx < len(script.segments) - 1:
+                segments_audio += pause
+        promo_audio = segments_audio
+    else:
+        promo_audio = analysis.standardize_audio(
+            tts.synthesize_audio(
+                tts.TTSRequest(
+                    voice_id=voice_ids[0],
+                    text=llm_result.promo_text,
+                    url=args.tts_url,
+                    model_id=args.tts_model_id,
+                    output_format=args.tts_output_format,
+                )
             )
         )
-    )
 
     if len(promo_audio) > 20000:
         raise RuntimeError("Promo audio is longer than 20 seconds; please shorten it.")

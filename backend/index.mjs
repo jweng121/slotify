@@ -511,6 +511,7 @@ app.post("/api/speech", async (req, res) => {
 app.post("/api/generate", upload.single("audio"), async (req, res) => {
   const audioFile = req.file;
   const voiceId = req.body?.voiceId?.toString()?.trim();
+  const voiceIds = req.body?.voiceIds?.toString()?.trim();
   const brand = req.body?.brand?.toString()?.trim();
   const productDesc = req.body?.productDesc?.toString()?.trim();
 
@@ -519,8 +520,8 @@ app.post("/api/generate", upload.single("audio"), async (req, res) => {
     return;
   }
 
-  if (!voiceId) {
-    res.status(400).json({ error: "voiceId is required." });
+  if (!voiceId && !voiceIds) {
+    res.status(400).json({ error: "voiceId or voiceIds is required." });
     return;
   }
 
@@ -558,8 +559,7 @@ app.post("/api/generate", upload.single("audio"), async (req, res) => {
       "ad_inserter.cli",
       "--main",
       basePath,
-      "--voice-id",
-      voiceId,
+      ...(voiceIds ? ["--voice-ids", voiceIds] : ["--voice-id", voiceId]),
       "--product-name",
       brand,
       "--product-desc",
