@@ -168,6 +168,8 @@ function App() {
   const [showRightsModal, setShowRightsModal] = useState(false);
   const [rightsAccepted, setRightsAccepted] = useState(false);
   const [rightsCertified, setRightsCertified] = useState(false);
+  const [selectedTone, setSelectedTone] = useState("professional");
+  const [selectedLanguage, setSelectedLanguage] = useState("en");
 
   const baseAudioName = useMemo(
     () => baseAudio?.name ?? "No file selected.",
@@ -1072,6 +1074,61 @@ function App() {
                 );
               })}
             </div>
+
+            {/* Voice Settings Section */}
+            <div className="voice-settings-section">
+              <div className="voice-settings-header">
+                <h3>Voice Settings</h3>
+                <p className="voice-settings-subtitle">
+                  Customize the tone and language of your sponsor reads
+                </p>
+              </div>
+              <div className="voice-settings-grid">
+                <div className="voice-setting-field">
+                  <label htmlFor="tone-select">Tone</label>
+                  <select
+                    id="tone-select"
+                    value={selectedTone}
+                    onChange={(e) => setSelectedTone(e.target.value)}
+                    className="voice-setting-select"
+                  >
+                    <option value="professional">Professional</option>
+                    <option value="friendly-casual">Friendly & Casual</option>
+                    <option value="energetic">Energetic</option>
+                    <option value="serious">Serious</option>
+                    <option value="warm">Warm</option>
+                    <option value="conversational">Conversational</option>
+                    <option value="enthusiastic">Enthusiastic</option>
+                  </select>
+                  <span className="helper">
+                    Choose the tone that best matches your podcast style
+                  </span>
+                </div>
+                <div className="voice-setting-field">
+                  <label htmlFor="language-select">Language</label>
+                  <select
+                    id="language-select"
+                    value={selectedLanguage}
+                    onChange={(e) => setSelectedLanguage(e.target.value)}
+                    className="voice-setting-select"
+                  >
+                    <option value="en">English</option>
+                    <option value="es">Spanish</option>
+                    <option value="fr">French</option>
+                    <option value="de">German</option>
+                    <option value="it">Italian</option>
+                    <option value="pt">Portuguese</option>
+                    <option value="ja">Japanese</option>
+                    <option value="ko">Korean</option>
+                    <option value="zh">Chinese</option>
+                  </select>
+                  <span className="helper">
+                    Select the language for voice generation
+                  </span>
+                </div>
+              </div>
+            </div>
+
             {audioUrl && (
               <div className="inline-preview">
                 <div className="inline-preview-title">Preview playback</div>

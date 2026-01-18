@@ -85,7 +85,7 @@
 .landing-hero-subtitle {
   margin: 0;
   font-size: 1.25rem;
-  font-family: "Source Serif 4", "Times New Roman", serif;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color: var(--hero-muted);
 }
 
@@ -93,6 +93,7 @@
   margin: 0;
   font-size: 1rem;
   line-height: 1.6;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color: rgba(248, 241, 232, 0.65);
   max-width: 560px;
 }
