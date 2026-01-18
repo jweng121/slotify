@@ -762,7 +762,7 @@ function App() {
               Seamless sponsor insertion for audio.
             </p>
             <p className="hero-body">
-              Upload an episode, paste an ad read, and Sl|lotify finds the best
+              Upload an episode, paste an ad read, and Slotify finds the best
               slot and inserts it naturally — in the creator&apos;s own voice.
             </p>
             <div className="hero-actions">
