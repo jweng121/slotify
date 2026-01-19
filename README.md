@@ -2,7 +2,7 @@
 
 UofTHacks 13 Winner - ElevenLabs Track.
 
-Pipeline: Upload a product name and audio file with speech → LLM generates ad text → ElevenLabs clones voice(s) and generates a human-like ad read → the system finds the optimal insertion point based on syntactic + semantic context, stitching the ad into the final audio.
+Pipeline: Upload a product name and audio file with speech → ElevenLabs clones voice(s) and generates a human-like ad read → Call OpenAI API to generate ad text → the system finds the optimal insertion point based on syntactic + semantic context, stitching the ad into the final audio.
 
 Demo: https://www.youtube.com/watch?v=S4m1lpipni0
 
@@ -17,7 +17,7 @@ Demo: https://www.youtube.com/watch?v=S4m1lpipni0
 - Frontend: React + TypeScript + Vite
 - Backend API: Node.js + Express
 - Audio pipeline: Python (pydub, librosa, pyloudnorm)
-- AI services: OpenAI (placement + copy), ElevenLabs (TTS/voice cloning)
+- AI services: OpenAI (ad generation + placement), ElevenLabs (TTS/voice cloning)
 - Media tools: ffmpeg/ffprobe
 
 ## Local deployment
@@ -66,6 +66,15 @@ The UI runs on `http://localhost:5173` and calls the backend.
 - `llm.py` builds the prompt and calls OpenAI to generate promo text and choose insertion index; parses JSON response into `LLMResult`
 - `mix.py` does audio mixing utilities: LUFS measurement, loudness matching, looping room tone, ducking, crossfade insertion, and context window extraction
 - `tts.py` builds sponsor reads with ElevenLabs (single or multi-statement blocks)
+
+### How is insertion point chosen?
+Semantic context:
+- Uses Whisper locally (if installed) to transcribe short context windows around candidate insertion points before evaluating topic transitions and sentence boundaries
+- If Whisper is not available, fall back to silence-based insertion
+
+Rhythmic/syntactic context:
+- Uses librosa to estimate tempo and beat times
+- Finds low-energy (RMS) valleys, snaps to the nearest beat, and inserts the promo there
 
 ### Install
 ```bash
@@ -153,16 +162,6 @@ curl -X POST http://localhost:3001/ad/insert \
   -F "adMode=DUO" \
   --output out.mp3
 ```
-
-## How it works
-Semantic context:
-- Uses Whisper locally (if installed) to transcribe short context windows around candidate insertion points
-- The LLM selects the best insertion point based on topic transitions and sentence boundaries, and writes a 1-sentence promo matching the tone
-- If Whisper is not available, it falls back to silence-based insertion
-
-Rhythmic/syntactic context:
-- Uses librosa to estimate tempo and beat times
-- Finds low-energy (RMS) valleys, snaps to the nearest beat, and inserts the promo there
 
 ## LLM configuration
 - `--llm-provider openai` (default `openai`)
