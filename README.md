@@ -2,7 +2,7 @@
 
 UofTHacks 13 Winner - ElevenLabs Track.
 
-Pipeline: Upload an audio file with speech → AI recommends the best insertion point(s) → ElevenLabs generates a human-like ad read → the system stitches it in smoothly and exports the final audio.
+Pipeline: Upload a product name and audio file with speech → LLM generates ad text → ElevenLabs clones voice(s) and generates a human-like ad read → the system finds the optimal insertion point based on syntactic + semantic context, stitching the ad into the final audio.
 
 Demo: https://www.youtube.com/watch?v=S4m1lpipni0
 
@@ -58,9 +58,6 @@ The UI runs on `http://localhost:5173` and calls the backend.
 ---
 
 ## Ad Inserter backend module
-This module generates and inserts a product promotion into a main audio track (podcast or rhythmic song). An LLM generates the 1-sentence promo text and choose the best insertion point based on semantic + syntactic context.
-
-### What each file in `backend/ad_inserter/` does
 - `__init__.py` exposes the package modules (analysis, llm, mix) and version
 - `analysis.py` handles audio analysis: ffmpeg check, loading/standardizing audio, silence-based candidate detection for podcasts, beat/RMS analysis for songs, optional Whisper transcription, and building candidate payloads
 - `analyze_cli.py` exposes a CLI helper that runs analysis and returns JSON for the Node API
