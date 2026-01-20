@@ -1,4 +1,4 @@
-# Seamless Sponsor Insertion
+# Semantic- and Signal-Aware Audio Ad Insertion Engine
 
 UofTHacks 13 Winner - ElevenLabs Track.
 
