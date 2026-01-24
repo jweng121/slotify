@@ -95,21 +95,8 @@ Rhythmic/syntactic context:
 - Uses librosa to estimate tempo and beat times
 - Finds low-energy (RMS) valleys, snaps to the nearest beat, and inserts the promo there
 
-### Install
-```bash
-pip install -r backend/requirements.txt
-```
-
-Install ffmpeg (required by pydub):
-- macOS: `brew install ffmpeg`
-- Ubuntu: `sudo apt-get install ffmpeg`
-
-Optional: install Whisper locally for transcripts:
-```bash
-pip install openai-whisper
-```
-
 ### Test without deploying full app
+
 Run from the `backend/` directory so `python -m ad_inserter.cli` can find the package.
 
 Podcast example:
