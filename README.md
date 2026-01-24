@@ -18,6 +18,25 @@ Demo: https://www.youtube.com/watch?v=S4m1lpipni0
 - AI services: OpenAI (placement + copy), ElevenLabs (TTS/voice cloning)
 - Media tools: ffmpeg/ffprobe
 
+## Project structure
+```text
+.
+├── README.md
+├── backend/              # Node API + Python ad_inserter pipeline
+│   ├── ad_inserter/
+│   ├── audio_tests/
+│   ├── index.mjs
+│   ├── package.json
+│   └── requirements.txt
+├── frontend/             # React UI
+│   ├── src/
+│   ├── index.html
+│   ├── package.json
+│   └── vite.config.ts
+├── docs/
+└── venv/
+```
+
 ## Local deployment
 ### Prereqs
 - Node.js (for `frontend/` and `backend/`)
@@ -82,7 +101,7 @@ Optional: install Whisper locally for transcripts:
 pip install openai-whisper
 ```
 
-### Usage
+### Test without deploying full app
 Run from the `backend/` directory so `python -m ad_inserter.cli` can find the package.
 
 Podcast example:
