@@ -4,7 +4,7 @@ UofTHacks 13 Winner - MLH Best Use of ElevenLabs.
 
 Pipeline: Upload a product name and audio file with speech → ElevenLabs clones voice(s) and generates a human-like ad read → Call OpenAI API to generate ad text → the system finds the optimal insertion point based on syntactic + semantic context, stitching the ad into the final audio.
 
-Demo: https://www.youtube.com/watch?v=S4m1lpipni0
+[Video Demo](https://www.youtube.com/watch?v=S4m1lpipni0)
 
 ## Core features
 - User input for podcast audio and product name - product details are optional
