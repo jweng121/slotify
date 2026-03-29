@@ -14,7 +14,7 @@ Pipeline: Upload a product name and audio file with speech → ElevenLabs clones
 - Export monetized episodes with loudness matching + crossfades
 
 ## Tech stack
-- Frontend: React + TypeScript + Vite
+- Frontend: React + TypeScript + Vite, plain CSS with CSS custom properties (Syne + DM Mono + DM Sans fonts)
 - Backend API: Node.js + Express
 - Audio pipeline: Python (pydub, librosa, pyloudnorm)
 - AI services: OpenAI (ad generation + placement), ElevenLabs (TTS/voice cloning)
